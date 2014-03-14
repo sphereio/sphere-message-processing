@@ -1,0 +1,56 @@
+{
+  "name": "sphere-message-processing",
+  "description": "This node.js library is designed to provide an easy way to write a SPHERE.IO message processors.",
+  "version": "0.1.0",
+  "homepage": "https://github.com/sphereio/sphere-message-processing.git",
+  "author": {
+    "name": "Oleg Ilyenko",
+    "email": "oleg.ilyenko@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:sphereio/sphere-message-processing.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sphereio/sphere-message-processing/issues"
+  },
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "https://github.com/sphereio/sphere-message-processing.git/blob/master/LICENSE-MIT"
+    }
+  ],
+  "main": "main",
+  "engines": {
+    "node": ">= 0.10.0"
+  },
+  "scripts": {
+    "test": "grunt coverage"
+  },
+  "dependencies": {
+    "optimist": "0.6.0",
+    "underscore": "~1.6.0",
+    "underscore.string": "2.3.3",
+    "q": "~1.0.0",
+    "rx": "2.2.13",
+    "lru-cache": "2.5.0",
+    "express": "3.5.0",
+    "measured": "0.1.3",
+    "sphere-node-connect": "0.3.0"
+  },
+  "devDependencies": {
+    "coveralls": "~2.6.1",
+    "grunt": "~0.4.1",
+    "grunt-bump": "~0.0.11",
+    "grunt-cli": "~0.1.9",
+    "grunt-coffeelint": "~0.0.8",
+    "grunt-contrib-clean": "~0.5.0",
+    "grunt-contrib-coffee": "~0.10.0",
+    "grunt-contrib-concat": "~0.3.0",
+    "grunt-contrib-watch": "~0.5.3",
+    "grunt-shell": "~0.6.2",
+    "istanbul": "~0.2.3",
+    "jasmine-node": "~1.13.0"
+  },
+  "keywords": []
+}

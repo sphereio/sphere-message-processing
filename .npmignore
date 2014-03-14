@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+src
+test
+coverage
+.travis.yml
+.coveralls.yml
+*.coffee
+
+.idea
+*.iml
+*.sh
