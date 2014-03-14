@@ -276,10 +276,20 @@ class SphereService
 
     @_post "/orders/#{order.id}", json
 
-  transitionLineItemState: (order, lineItemId, quantity, fromState, toState) ->
+  transitionLineItemState: (order, lineItemId, quantity, fromState, toState, date) ->
+    action =
+      action: 'transitionLineItemState'
+      lineItemId: lineItemId
+      quantity: quantity
+      fromState: fromState
+      toState: toState
+
+    if date?
+      action.actualTransitionDate = date
+
     json =
       version: order.version
-      actions: [{action: 'transitionLineItemState', lineItemId: lineItemId, quantity: quantity, fromState: fromState, toState: toState}]
+      actions: [action]
 
     @_post "/orders/#{order.id}", json
 

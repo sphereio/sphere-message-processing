@@ -22,6 +22,8 @@ class MessageProcessing
     new MessageProcessor @stats,
       messageSources:
         _.map @sourceProjects, (project) =>
+          project.user_agent = @argv.processorName
+
           sphereService = new SphereService @stats,
             additionalMessageCriteria: @messageCriteria
             additionalMessageExpand: @messageExpand
