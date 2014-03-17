@@ -32,11 +32,11 @@ class MessageProcessor
     .subscribe @_ignoreCompleted(@recycleBin)
 
   _doProcessMessages: (lockedMessages) ->
-    toUnlock = new Rx.Subject()
+    toUnlock = new Rx.ReplaySubject()
 
     unlocked = toUnlock
     .flatMap (msg) =>
-      subj = new Rx.Subject()
+      subj = new Rx.BehaviorSubject()
 
       msg.persistence.unlockMessage msg
       .then (msg) ->
@@ -58,7 +58,7 @@ class MessageProcessor
       errors.subscribe @_ignoreCompleted(@errors)
       sink
     .flatMap (msg) =>
-      subj = new Rx.Subject()
+      subj = new Rx.BehaviorSubject()
 
       @_processMessage @messageProcessors, msg
       .then (results) =>
@@ -77,7 +77,7 @@ class MessageProcessor
 
       subj
     .flatMap (msg) =>
-      subj = new Rx.Subject()
+      subj = new Rx.BehaviorSubject()
 
       msg.persistence.reportSuccessfullProcessing msg
       .then (msg) ->
@@ -151,7 +151,7 @@ class MessageProcessor
 
     errorProcessor
     .flatMap (msg) =>
-      subj = new Rx.Subject()
+      subj = new Rx.BehaviorSubject()
 
       @stats.processingError msg
       msg.message.persistence.reportMessageProcessingFailure msg.message, msg.error, msg.processor

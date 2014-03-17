@@ -49,7 +49,7 @@ class Stats
     @_cacheClearCommandsObserver = new Rx.Subject()
     @cacheClearCommands = @_cacheClearCommandsObserver
 
-    @_panicModeObserver = new Rx.Subject()
+    @_panicModeObserver = new Rx.BehaviorSubject()
     @panicModeEvents = @_panicModeObserver
 
   toJSON: (countOnly = false) ->
