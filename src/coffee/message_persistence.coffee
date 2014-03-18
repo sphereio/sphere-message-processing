@@ -112,9 +112,9 @@ class MessagePersistenceService
     Q(@processedMessagesCache.get(msg.payload.id)?)
 
   lockMessage: (msg) ->
-    sink = new Rx.BehaviorSubject()
-    errors = new Rx.BehaviorSubject()
-    skip = new Rx.BehaviorSubject()
+    sink = new Rx.ReplaySubject()
+    errors = new Rx.ReplaySubject()
+    skip = new Rx.ReplaySubject()
 
     @sphere.lockMessage msg.payload
     .then (lock) =>
@@ -198,8 +198,8 @@ class MessagePersistenceService
       doSink()
 
   orderBySequenceNumber: (msg, recycleBin) ->
-    sink = new Rx.BehaviorSubject()
-    errors = new Rx.BehaviorSubject()
+    sink = new Rx.ReplaySubject()
+    errors = new Rx.ReplaySubject()
 
     @_getLastProcessedSequenceNumber msg
     .then (lastProcessedSN) =>

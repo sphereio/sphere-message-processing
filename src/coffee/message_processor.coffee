@@ -36,7 +36,7 @@ class MessageProcessor
 
     unlocked = toUnlock
     .flatMap (msg) =>
-      subj = new Rx.BehaviorSubject()
+      subj = new Rx.ReplaySubject()
 
       msg.persistence.unlockMessage msg
       .then (msg) ->
@@ -58,7 +58,7 @@ class MessageProcessor
       errors.subscribe @_ignoreCompleted(@errors)
       sink
     .flatMap (msg) =>
-      subj = new Rx.BehaviorSubject()
+      subj = new Rx.ReplaySubject()
 
       @_processMessage @messageProcessors, msg
       .then (results) =>
@@ -77,7 +77,7 @@ class MessageProcessor
 
       subj
     .flatMap (msg) =>
-      subj = new Rx.BehaviorSubject()
+      subj = new Rx.ReplaySubject()
 
       msg.persistence.reportSuccessfullProcessing msg
       .then (msg) ->
@@ -106,7 +106,8 @@ class MessageProcessor
       msg.persistence.checkAvaialbleForProcessingAndLockLocally msg
 
     other.subscribe @_ignoreCompleted(@recycleBin)
-    errors.subscribe @_ignoreCompleted(@unrecoverableErrors)
+    errors
+    .subscribe @_ignoreCompleted(@unrecoverableErrors)
 
     newMessages
     .do (msg) =>
@@ -114,7 +115,8 @@ class MessageProcessor
     .flatMap (msg) =>
       [locked, errors, toRecycle] = msg.persistence.lockMessage msg
 
-      errors.subscribe @_ignoreCompleted(@unrecoverableErrors)
+      errors
+      .subscribe @_ignoreCompleted(@unrecoverableErrors)
       toRecycle.subscribe @_ignoreCompleted(@recycleBin)
 
       locked
@@ -151,7 +153,7 @@ class MessageProcessor
 
     errorProcessor
     .flatMap (msg) =>
-      subj = new Rx.BehaviorSubject()
+      subj = new Rx.ReplaySubject()
 
       @stats.processingError msg
       msg.message.persistence.reportMessageProcessingFailure msg.message, msg.error, msg.processor
@@ -176,8 +178,11 @@ class MessageProcessor
 
     errorProcessor
     .map (box) ->
-      console.error "Error during: #{box.processor}.", box.message.payload
-      console.error box.error.stack
+      if box?
+        console.error "Error during: #{box.processor}.", box.message.payload
+        console.error box.error.stack
+      else
+        console.error "Some strange error happend, nut not shure want exactly :( Please review the message processing pipeline."
       box.message
     .subscribe recycleBin
 
