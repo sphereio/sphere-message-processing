@@ -1,13 +1,15 @@
 Rx = require 'rx'
 Q = require 'q'
 {_} = require 'underscore'
-{Rest} = require('sphere-node-connect')
+{Rest} = require 'sphere-node-connect'
+{TaskQueue} = require '../lib/task_queue'
 util = require '../lib/util'
 cache = require 'lru-cache'
 
 class SphereService
   constructor: (@stats, options) ->
     @fetchHours = options.fetchHours
+    @requestQueue = options.requestQueue or new TaskQueue {maxParallelTasks: 100}
     @additionalMessageCriteria = options.additionalMessageCriteria
     @additionalMessageExpand = options.additionalMessageExpand or []
     @processorName = options.processorName
@@ -28,52 +30,55 @@ class SphereService
       @referenceCache.reset()
 
   _get: (path) ->
-    d = Q.defer()
+    @requestQueue.addTask =>
+      d = Q.defer()
 
-    @requestMeter.mark()
-    stopwatch = @requestTimer.start()
-    @_client.GET path, (error, response, body) ->
-      stopwatch.end()
-      if error
-        d.reject error
-      else if response.statusCode is 200
-        d.resolve body
-      else
-        d.reject new ErrorStatusCode(response.statusCode, body)
+      @requestMeter.mark()
+      stopwatch = @requestTimer.start()
+      @_client.GET path, (error, response, body) ->
+        stopwatch.end()
+        if error
+          d.reject error
+        else if response.statusCode is 200
+          d.resolve body
+        else
+          d.reject new ErrorStatusCode(response.statusCode, body)
 
-    d.promise
+      d.promise
 
   _post: (path, json) ->
-    d = Q.defer()
+    @requestQueue.addTask =>
+      d = Q.defer()
 
-    @requestMeter.mark()
-    stopwatch = @requestTimer.start()
-    @_client.POST path, json, (error, response, body) ->
-      stopwatch.end()
-      if error
-        d.reject error
-      else if response.statusCode is 200 or response.statusCode is 201
-        d.resolve body
-      else
-        d.reject new ErrorStatusCode(response.statusCode, body)
+      @requestMeter.mark()
+      stopwatch = @requestTimer.start()
+      @_client.POST path, json, (error, response, body) ->
+        stopwatch.end()
+        if error
+          d.reject error
+        else if response.statusCode is 200 or response.statusCode is 201
+          d.resolve body
+        else
+          d.reject new ErrorStatusCode(response.statusCode, body)
 
-    d.promise
+      d.promise
 
   _delete: (path) ->
-    d = Q.defer()
+    @requestQueue.addTask =>
+      d = Q.defer()
 
-    @requestMeter.mark()
-    stopwatch = @requestTimer.start()
-    @_client.DELETE path, (error, response, body) ->
-      stopwatch.end()
-      if error
-        d.reject error
-      else if response.statusCode is 200
-        d.resolve body
-      else
-        d.reject new ErrorStatusCode(response.statusCode, body)
+      @requestMeter.mark()
+      stopwatch = @requestTimer.start()
+      @_client.DELETE path, (error, response, body) ->
+        stopwatch.end()
+        if error
+          d.reject error
+        else if response.statusCode is 200
+          d.resolve body
+        else
+          d.reject new ErrorStatusCode(response.statusCode, body)
 
-    d.promise
+      d.promise
 
   getSourceInfo: () ->
     {name: "sphere.#{@projectKey}", prefix: @projectKey, sphere: this}

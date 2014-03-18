@@ -179,7 +179,11 @@ class MessageProcessor
     errorProcessor
     .map (box) ->
       if box?
-        console.error "Error during: #{box.processor}.", box.message.payload
+        if box.message?
+          console.error "Error during: #{box.processor}.", box.message.payload
+        else
+          console.error "Error during: #{box.processor}.", "No message"
+
         console.error box.error.stack
       else
         console.error "Some strange error happend, nut not shure want exactly :( Please review the message processing pipeline."

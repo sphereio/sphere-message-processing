@@ -7,6 +7,7 @@ _s = require 'underscore.string'
 {Stats} = require '../lib/stats'
 {MessageProcessor} = require '../lib/message_processor'
 {MessagePersistenceService} = require '../lib/message_persistence'
+{TaskQueue} = require '../lib/task_queue'
 
 util = require '../lib/util'
 
@@ -17,6 +18,7 @@ class MessageProcessing
 
     @stats = new Stats _.extend({}, defaultStatsOptions, @statsOptions)
     @sourceProjects = util.parseProjectsCredentials @argv.sourceProjects
+    @requestQueue = new TaskQueue {maxParallelTasks: @argv.maxParallelSphereConnections}
 
   _createMessageProcessor: () ->
     new MessageProcessor @stats,
@@ -25,6 +27,7 @@ class MessageProcessing
           project.user_agent = @argv.processorName
 
           sphereService = new SphereService @stats,
+            requestQueue: @requestQueue
             additionalMessageCriteria: @messageCriteria
             additionalMessageExpand: @messageExpand
             fetchHours: @argv.fetchHours
@@ -40,7 +43,7 @@ class MessageProcessing
     @stats.startServer(@argv.statsPort)
 
     if fn?
-      @processors.push fn(@argv, @stats)
+      @processors.push fn(@argv, @stats, @requestQueue)
 
     @messageProcessor = @_createMessageProcessor()
     @messageProcessor.run()
@@ -103,10 +106,12 @@ class MessageProcessingBuilder
     .describe('awaitTimeout', 'How long to wait for the message ordering (in ms).')
     .describe('heartbeatInterval', 'How often are messages retrieved from sphere project (in ms).')
     .describe('fetchHours', 'How many hours of messages should be fetched (in hours).')
+    .describe('maxParallelSphereConnections', 'How many parallel connection to sphere are allowed.')
     .default('statsPort', 7777)
     .default('awaitTimeout', 120000)
     .default('heartbeatInterval', 2000)
     .default('fetchHours', 24)
+    .default('maxParallelSphereConnections', 100)
     .default('processorName', "orderStateSync")
     .demand(@demand)
 
