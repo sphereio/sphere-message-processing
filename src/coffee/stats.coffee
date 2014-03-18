@@ -174,7 +174,7 @@ class Stats
         message: 'Self destruction sequence initiated!'
 
       @panicMode = true
-      @_panicModeObserver.onNext "AAAAaaaAAAaaaa!!!!"
+      @_panicModeObserver.onNext true
       @_initiateSelfDestructionSequence()
 
     statsApp.get '/pause', (req, res) =>

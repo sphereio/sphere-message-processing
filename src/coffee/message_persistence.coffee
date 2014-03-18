@@ -25,8 +25,9 @@ class MessagePersistenceService
     @stats.cacheClearCommands.subscribe =>
       @sequenceNumberCache.reset()
       @processedMessagesCache.reset()
-    @stats.panicModeEvents.subscribe =>
-      @panicMode = true
+    @stats.panicModeEvents.subscribe (panic) =>
+      if panic?
+        @panicMode = panic
 
 
     @_startAwaitingMessagesChecker()
@@ -112,9 +113,9 @@ class MessagePersistenceService
     Q(@processedMessagesCache.get(msg.payload.id)?)
 
   lockMessage: (msg) ->
-    sink = new Rx.ReplaySubject()
-    errors = new Rx.ReplaySubject()
-    skip = new Rx.ReplaySubject()
+    sink = new Rx.Subject()
+    errors = new Rx.Subject()
+    skip = new Rx.Subject()
 
     @sphere.lockMessage msg.payload
     .then (lock) =>
@@ -198,8 +199,8 @@ class MessagePersistenceService
       doSink()
 
   orderBySequenceNumber: (msg, recycleBin) ->
-    sink = new Rx.ReplaySubject()
-    errors = new Rx.ReplaySubject()
+    sink = new Rx.Subject()
+    errors = new Rx.Subject()
 
     @_getLastProcessedSequenceNumber msg
     .then (lastProcessedSN) =>

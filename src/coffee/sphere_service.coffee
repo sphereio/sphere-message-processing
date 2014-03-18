@@ -85,7 +85,7 @@ class SphereService
 
   # TODO: (optimization) implement pagging and remember the last error date so that amount of the messages can be reduced
   getMessageSource: ->
-    subject = new Rx.ReplaySubject()
+    subject = new Rx.Subject()
 
     observable = subject
     .flatMap =>
@@ -105,7 +105,7 @@ class SphereService
       # if it takes too much time to get messages, then just ignore
       Rx.Observable.fromArray []
     else
-      subj = new Rx.ReplaySubject()
+      subj = new Rx.Subject()
 
       @_messageFetchInProgress = true
 
