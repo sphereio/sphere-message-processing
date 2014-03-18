@@ -10,3 +10,5 @@ coverage
 .idea
 *.iml
 *.sh
+run.coffee
+run.js

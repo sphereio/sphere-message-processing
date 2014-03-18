@@ -25,7 +25,7 @@
     "node": ">= 0.10.0"
   },
   "scripts": {
-    "test": "grunt coverage"
+    "test": "grunt test"
   },
   "dependencies": {
     "optimist": "0.6.0",
