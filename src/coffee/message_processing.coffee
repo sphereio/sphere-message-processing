@@ -27,6 +27,7 @@ class MessageProcessing
           project.user_agent = @argv.processorName
 
           sphereService = new SphereService @stats,
+            sphereHost: @argv.sphereHost
             requestQueue: @requestQueue
             messagesPageSize: @argv.messagesPageSize
             additionalMessageCriteria: @messageCriteria
@@ -100,6 +101,7 @@ class MessageProcessingBuilder
     .alias('statsPort', 'p')
     .alias('help', 'h')
     .describe('help', 'Shows usage info and exits.')
+    .describe('sphereHost', 'Sphere.io host name.')
     .describe('sourceProjects', 'Sphere.io project credentials. The messages from these projects would be processed. Format: `prj1-key:clientId:clientSecret[,prj2-key:clientId:clientSecret][,...]`.')
     .describe('statsPort', 'The port of the stats HTTP server.')
     .describe('processorName', 'The name of this processor. Name is used to rebember, which messaged are already processed.')
@@ -115,6 +117,7 @@ class MessageProcessingBuilder
     .default('fetchHours', 24)
     .default('messagesPageSize', 100)
     .default('maxParallelSphereConnections', 100)
+    .default('sphereHost', 'api.sphere.io')
     .default('processorName', "orderStateSync")
     .demand(@demand)
 

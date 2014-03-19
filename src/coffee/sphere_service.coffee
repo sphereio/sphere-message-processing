@@ -9,6 +9,7 @@ cache = require 'lru-cache'
 
 class SphereService
   constructor: (@stats, options) ->
+    @sphereHost = options.sphereHost
     @fetchHours = options.fetchHours
     @statsPrefix = options.statsPrefix or ""
     @messagesPageSize = options.messagesPageSize
@@ -17,7 +18,7 @@ class SphereService
     @additionalMessageExpand = options.additionalMessageExpand or []
     @processorName = options.processorName
     @projectKey = options.connector.config.project_key
-    @_client = new Rest options.connector
+    @_client = new Rest _.extend({}, {host: @sphereHost}, options.connector)
     @_messageFetchInProgress = false
 
     @referenceCacheOptions = options.referenceCacheOptions or {max: 1000, maxAge: 60 * 60 * 1000}
