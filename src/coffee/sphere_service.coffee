@@ -13,7 +13,7 @@ class SphereService
     @fetchHours = options.fetchHours
     @statsPrefix = options.statsPrefix or ""
     @messagesPageSize = options.messagesPageSize
-    @requestQueue = options.requestQueue or new TaskQueue {maxParallelTasks: 100}
+    @requestQueue = options.requestQueue or (new TaskQueue @stats, {maxParallelTasks: 100})
     @additionalMessageCriteria = options.additionalMessageCriteria
     @additionalMessageExpand = options.additionalMessageExpand or []
     @processorName = options.processorName

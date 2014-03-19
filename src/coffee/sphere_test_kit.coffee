@@ -155,6 +155,27 @@ class  SphereTestKit
       shippingAddress: {
         country: "US"
       },
+      shippingInfo: {
+        shippingMethodName: 'Normal',
+        price: {
+          centAmount: 1000,
+          currencyCode: "EUR"
+        },
+        shippingRate: {
+          price: {
+            centAmount: 1000,
+            currencyCode: "EUR"
+          }
+        },
+        taxRate: {
+          name: "some_name",
+          amount: 0.19,
+          includedInPrice: true,
+          country: "US",
+          id: @taxCategory.id
+        },
+        taxCategory: {"typeId": "tax-category", id: @taxCategory.id},
+      },
       taxedPrice: {
         taxPortions: [{
           amount: {
@@ -186,13 +207,24 @@ class  SphereTestKit
       .then (newRetailerOrder) ->
         [masterOrder, newRetailerOrder]
 
+  addSomeDeliveries: () ->
+    ps = _.map @orders, (o) =>
+      @sphere.addDelivery o.retailerOrder, [{id: o.retailerOrder.lineItems[0].id, quantity: 4}]
+      .then (o1) =>
+        @sphere.addParcel o1, o1.shippingInfo.deliveries[0].id, {heightInMillimeter: 11, lengthInMillimeter: 22, widthInMillimeter: 33, weightInGram: 44}, {trackingId: "ABCD123", carrier: "DHL"}
+      .then (o2) ->
+        console.info "Finished with deliveries: #{o2.id}"
+        o.retailerOrder = o2
+
+    Q.all ps
+
   @run: (sphereService) ->
     sphereTestKit = new SphereTestKit sphereService
     sphereTestKit.setupProject()
     .then (kit) ->
       console.info "Done"
-
-      kit.scheduleStateTransitions()
+#     kit.scheduleStateTransitions()
+      kit.addSomeDeliveries()
     #  sphereService.getRecentMessages(util.addDateTime(new Date(), -3, 0, 0))
     .then (foo) ->
       console.info _.size(foo)
