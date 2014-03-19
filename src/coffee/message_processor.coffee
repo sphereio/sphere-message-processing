@@ -14,8 +14,8 @@ class MessageProcessor
 
   run: () ->
     heartbeat = Rx.Observable.interval @heartbeatInterval
-    .filter (tick) =>
-      not @stats.applyBackpressureAtTick(tick)
+    .filter (heartbeat) =>
+      not @stats.applyBackpressureAtHeartbeat(heartbeat)
 
     messageSources = _.map @messageSources, (source) ->
       [sourceObserver, sourceObservable] = source.getMessageSource()

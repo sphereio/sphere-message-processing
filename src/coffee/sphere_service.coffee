@@ -3,12 +3,15 @@ Q = require 'q'
 {_} = require 'underscore'
 {Rest} = require 'sphere-node-connect'
 {TaskQueue} = require '../lib/task_queue'
+{Pagger} = require '../lib/pagger'
 util = require '../lib/util'
 cache = require 'lru-cache'
 
 class SphereService
   constructor: (@stats, options) ->
     @fetchHours = options.fetchHours
+    @statsPrefix = options.statsPrefix or ""
+    @messagesPageSize = options.messagesPageSize
     @requestQueue = options.requestQueue or new TaskQueue {maxParallelTasks: 100}
     @additionalMessageCriteria = options.additionalMessageCriteria
     @additionalMessageExpand = options.additionalMessageExpand or []
@@ -20,10 +23,10 @@ class SphereService
     @referenceCacheOptions = options.referenceCacheOptions or {max: 1000, maxAge: 60 * 60 * 1000}
     @referenceCache = cache @referenceCacheOptions
 
-    @requestMeter = @stats.addCustomMeter @projectKey, "requests"
-    @requestTimer = @stats.addCustomTimer @projectKey, "requestTime"
+    @requestMeter = @stats.addCustomMeter @statsPrefix + @projectKey, "requests"
+    @requestTimer = @stats.addCustomTimer @statsPrefix + @projectKey, "requestTime"
 
-    @stats.addCustomStat @projectKey, "referenceCacheSize", =>
+    @stats.addCustomStat @statsPrefix + @projectKey, "referenceCacheSize", =>
       _.size @referenceCache
 
     @stats.cacheClearCommands.subscribe =>
@@ -83,7 +86,7 @@ class SphereService
   getSourceInfo: () ->
     {name: "sphere.#{@projectKey}", prefix: @projectKey, sphere: this}
 
-  # TODO: (optimization) implement pagging and remember the last error date so that amount of the messages can be reduced
+  # TODO: (optimization) remember the last error date so that amount of the messages can be reduced
   getMessageSource: ->
     subject = new Rx.Subject()
 
@@ -93,36 +96,32 @@ class SphereService
 
     [subject, observable]
 
-  getRecentMessages: (fromDate) ->
+  getRecentMessages: (fromDate, offset, limit) ->
     additional = if @additionalMessageCriteria? then " and #{@additionalMessageCriteria}" else ""
 
-    @_get @_pathWhere("/messages", "createdAt > \"#{util.formatDate fromDate}\"#{additional}", ["createdAt asc"], ["resource"].concat(@additionalMessageExpand), 0)
-    .then (res) ->
-      res.results
+    @_get @_pathWhere("/messages", "createdAt > \"#{util.formatDate fromDate}\"#{additional}", ["createdAt asc"], ["resource"].concat(@additionalMessageExpand), limit, offset)
 
   _loadLatestMessages: () ->
     if @_messageFetchInProgress
       # if it takes too much time to get messages, then just ignore
       Rx.Observable.fromArray []
     else
-      subj = new Rx.Subject()
-
       @_messageFetchInProgress = true
+      limitDate = util.addDateTime(new Date(), -1 * @fetchHours, 0, 0)
 
-      @getRecentMessages util.addDateTime(new Date(), -1 * @fetchHours, 0, 0)
-      .then (messages) ->
-        _.each messages, (msg) ->
-          subj.onNext msg
-        subj.onCompleted()
-      .fail (error) =>
-        console.error "Error during message fetch!"
-        console.error error.stack
-        @stats.reportMessageFetchError()
-      .finally =>
-        @_messageFetchInProgress = false
-      .done()
-
-      subj
+      new Pagger
+        pageSize: @messagesPageSize
+        onNextPage: (offset, limit) =>
+          @getRecentMessages limitDate, offset, limit
+        onError: (error) =>
+          console.error "Error during message fetch!"
+          console.error error.stack
+          @stats.reportMessageFetchError()
+        onFinish: =>
+          @_messageFetchInProgress = false
+        applyBackpressureOnNextPage: (offset, limit, total)=>
+          @stats.applyBackpressureAtNextMessagePage offset, limit, total
+      .page()
 
   getLastProcessedSequenceNumber: (resource) ->
     @_get "/custom-objects/#{@processorName}.lastSequenceNumber/#{resource.typeId}-#{resource.id}"
@@ -192,11 +191,11 @@ class SphereService
   unlockMessage: (msg, lock) ->
     @_delete "/custom-objects/#{@processorName}.messages/#{msg.id}?version=#{lock.version}"
 
-  _pathWhere: (path, where, sort = [], expand = [], limit = 100) ->
+  _pathWhere: (path, where, sort = [], expand = [], limit = 100, offset = 0) ->
     sorting = if not _.isEmpty(sort) then "&" + _.map(sort, (s) -> "sort=" + encodeURIComponent(s)).join("&") else ""
     expanding = if not _.isEmpty(sort) then "&" + _.map(expand, (e) -> "expand=" + encodeURIComponent(e)).join("&") else ""
 
-    "#{path}?where=#{encodeURIComponent(where)}#{sorting}#{expanding}&limit=#{limit}"
+    "#{path}?where=#{encodeURIComponent(where)}#{sorting}#{expanding}&limit=#{limit}&offset=#{offset}"
 
   ensureChannels: (defs) ->
     promises = _.map defs, (def) =>

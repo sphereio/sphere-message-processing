@@ -1,17 +1,14 @@
 Rx = require 'rx'
 Q = require 'q'
 {_} = require 'underscore'
-express = require 'express'
-measured = require 'measured'
 
 class TaskQueue
-  constructor: (options) ->
+  constructor: (@stats, options) ->
     if not options.maxParallelTasks?
       throw new Error("maxParallelTasks is undefined :(")
     @_maxParallelTasks = options.maxParallelTasks
     @_queue = []
     @_activeCount = 0
-    @taskCount = 0
 
   addTask: (taskFn) ->
     d = Q.defer()
@@ -27,10 +24,8 @@ class TaskQueue
       @_maybeExecute()
 
   _startTask: (task) ->
+    @stats.taskStarted()
     @_activeCount = @_activeCount + 1
-
-    @taskCount = @taskCount + 1
-    foo = @taskCount
 
     task.fn()
     .then (res) ->
@@ -38,6 +33,7 @@ class TaskQueue
     .fail (error) ->
       task.defer.reject error
     .finally =>
+      @stats.taskFinished()
       @_activeCount = @_activeCount - 1
       @_maybeExecute()
     .done()

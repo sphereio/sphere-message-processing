@@ -18,7 +18,7 @@ class MessageProcessing
 
     @stats = new Stats _.extend({}, defaultStatsOptions, @statsOptions)
     @sourceProjects = util.parseProjectsCredentials @argv.sourceProjects
-    @requestQueue = new TaskQueue {maxParallelTasks: @argv.maxParallelSphereConnections}
+    @requestQueue = new TaskQueue @stats, {maxParallelTasks: @argv.maxParallelSphereConnections}
 
   _createMessageProcessor: () ->
     new MessageProcessor @stats,
@@ -28,6 +28,7 @@ class MessageProcessing
 
           sphereService = new SphereService @stats,
             requestQueue: @requestQueue
+            messagesPageSize: @argv.messagesPageSize
             additionalMessageCriteria: @messageCriteria
             additionalMessageExpand: @messageExpand
             fetchHours: @argv.fetchHours

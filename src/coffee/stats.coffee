@@ -31,6 +31,8 @@ class Stats
 
     @messagesIn = new Meter "messagesIn", @units
     @messagesOut = new Meter "messagesOut", @units
+    @tasksStarted = new Meter "tasksStarted", @units
+    @tasksFinished = new Meter "tasksFinished", @units
     @awaitOrderingIn = new Meter "awaitOrderingIn", @units
     @awaitOrderingOut = new Meter "awaitOrderingOut", @units
     @lockedMessages = new Meter "lockedMessages", @units
@@ -59,9 +61,12 @@ class Stats
       processor: @processor
       messagesIn: if countOnly then @messagesIn.count() else @messagesIn.toJSON()
       messagesOut: if countOnly then @messagesOut.count() else @messagesOut.toJSON()
+      tasksStarted: if countOnly then @tasksStarted.count() else @tasksStarted.toJSON()
+      tasksFinished: if countOnly then @tasksFinished.count() else @tasksFinished.toJSON()
       awaitOrderingIn: if countOnly then @awaitOrderingIn.count() else @awaitOrderingIn.toJSON()
       awaitOrderingOut: if countOnly then @awaitOrderingOut.count() else @awaitOrderingOut.toJSON()
       messagesInProgress: @messagesInProgress()
+      activeTasks: @activeTasks()
       messagesAwaiting: @messagesAwaiting()
       locallyLocked: @locallyLocked
       lockedMessages: if countOnly then @lockedMessages.count() else @lockedMessages.toJSON()
@@ -102,9 +107,21 @@ class Stats
     @customTimers.push {prefix: prefix, name: name, timer: timer}
     timer
 
-  applyBackpressureAtTick: (tick) ->
-    @lastHeartbeat = tick
+  applyBackpressureAtHeartbeat: (heartbeat) ->
+    @lastHeartbeat = heartbeat
     @paused or @panicMode or (@messagesInProgress() - @messagesAwaiting()) > 0
+
+  applyBackpressureAtNextMessagePage: (offset, limit, total) ->
+    false
+
+  activeTasks: () ->
+    @tasksStarted.count() - @tasksFinished.count()
+
+  taskStarted: () ->
+    @tasksStarted.mark()
+
+  taskFinished: () ->
+    @tasksFinished.mark()
 
   messagesInProgress: () ->
     @messagesIn.count() - @messagesOut.count()
