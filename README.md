@@ -1,7 +1,6 @@
 # sphere-message-processing
-============================
 
-[![Build Status](https://travis-ci.org/sphereio/sphere-message-processing.png?branch=master)](https://travis-ci.org/sphereio/sphere-message-processing) [![Coverage Status](https://coveralls.io/repos/sphereio/sphere-message-processing/badge.png?branch=master)](https://coveralls.io/r/sphereio/sphere-message-processing?branch=master) [![Dependency Status](https://david-dm.org/sphereio/sphere-message-processing.png?theme=shields.io)](https://david-dm.org/sphereio/sphere-message-processing) [![devDependency Status](https://david-dm.org/sphereio/sphere-message-processing/dev-status.png?theme=shields.io)](https://david-dm.org/sphereio/sphere-message-processing#info=devDependencies)
+[![Build Status](https://travis-ci.org/sphereio/sphere-message-processing.png?branch=master)](https://travis-ci.org/sphereio/sphere-message-processing) [![NPM version](https://badge.fury.io/js/sphere-message-processing.png)](http://badge.fury.io/js/sphere-message-processing) [![Coverage Status](https://coveralls.io/repos/sphereio/sphere-message-processing/badge.png?branch=master)](https://coveralls.io/r/sphereio/sphere-message-processing?branch=master) [![Dependency Status](https://david-dm.org/sphereio/sphere-message-processing.png?theme=shields.io)](https://david-dm.org/sphereio/sphere-message-processing) [![devDependency Status](https://david-dm.org/sphereio/sphere-message-processing/dev-status.png?theme=shields.io)](https://david-dm.org/sphereio/sphere-message-processing#info=devDependencies)
 
 Service listens for line item state change messages in some project and replicates them to another SPHERE.IO project.
 
