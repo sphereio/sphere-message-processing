@@ -298,6 +298,31 @@ class SphereService
 
     @_post "/orders/#{order.id}", json
 
+  addDelivery: (order, deliveryItems) ->
+    action =
+      action: 'addDelivery'
+      items: deliveryItems
+
+    json =
+      version: order.version
+      actions: [action]
+
+    @_post "/orders/#{order.id}", json
+
+  addParcel: (order, deliveryId, measurements, trackingData) ->
+    action =
+      action: 'addParcelToDelivery'
+      deliveryId: deliveryId
+
+    action.measurements = measurements if measurements?
+    action.trackingData = trackingData if trackingData?
+
+    json =
+      version: order.version
+      actions: [action]
+
+    @_post "/orders/#{order.id}", json
+
   _refCacheKey: (ref) ->
     ref.typeId + "-" + ref.id
 
