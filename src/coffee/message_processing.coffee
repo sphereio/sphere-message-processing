@@ -12,9 +12,14 @@ _s = require 'underscore.string'
 util = require '../lib/util'
 
 class MessageProcessing
-  constructor: (@argv, @statsOptions, @processors, @messageCriteria, @messageExpand) ->
+  constructor: (@argv, @statsOptions, @processors, @messageCriteria, @messageExpand, @defaultProcessorName) ->
+    @processorName = @argv.processorName or @defaultProcessorName
+
+    if not @processorName?
+      throw new Error("Processor name is not defined")
+
     defaultStatsOptions =
-      processor: @argv.processorName
+      processor: @processorName
 
     @stats = new Stats _.extend({}, defaultStatsOptions, @statsOptions)
     @sourceProjects = util.parseProjectsCredentials @argv.sourceProjects
@@ -24,7 +29,7 @@ class MessageProcessing
     new MessageProcessor @stats,
       messageSources:
         _.map @sourceProjects, (project) =>
-          project.user_agent = @argv.processorName
+          project.user_agent = @processorName
 
           sphereService = new SphereService @stats,
             sphereHost: @argv.sphereHost
@@ -33,7 +38,7 @@ class MessageProcessing
             additionalMessageCriteria: @messageCriteria
             additionalMessageExpand: @messageExpand
             fetchHours: @argv.fetchHours
-            processorName: @argv.processorName
+            processorName: @processorName
             connector:
               config: project
           new MessagePersistenceService @stats, sphereService,
@@ -53,7 +58,7 @@ class MessageProcessing
     if @argv.printStats
       @stats.startPrinter(true)
 
-    console.info "Processor '#{@argv.processorName}' started."
+    console.info "Processor '#{@processorName}' started."
 
   @builder: () ->
     new MessageProcessingBuilder
@@ -94,6 +99,10 @@ class MessageProcessingBuilder
     @additionalMessageExpand = expand
     this
 
+  processorName: (pn) ->
+    @defaultProcessorName = pn
+    this
+
   build: () ->
     o = optimist
     .usage(@usage)
@@ -118,7 +127,6 @@ class MessageProcessingBuilder
     .default('messagesPageSize', 100)
     .default('maxParallelSphereConnections', 100)
     .default('sphereHost', 'api.sphere.io')
-    .default('processorName', "orderStateSync")
     .demand(@demand)
 
     if @optimistExtrasFn?
@@ -130,7 +138,7 @@ class MessageProcessingBuilder
       o.showHelp()
       process.exit 0
 
-    new MessageProcessing argv, @statsOptions, @processors, @additionalMessageCriteria, @additionalMessageExpand
+    new MessageProcessing argv, @statsOptions, @processors, @additionalMessageCriteria, @additionalMessageExpand, @defaultProcessorName
 
 exports.MessageProcessing = MessageProcessing
 exports.MessageProcessingBuilder = MessageProcessingBuilder
