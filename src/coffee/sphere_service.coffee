@@ -19,8 +19,9 @@ class SphereService
     @processorName = options.processorName
     @projectKey = options.connector.config.project_key
     @projectProps = options.connector.config.props
-    @_client = new Rest _.extend({}, {host: @sphereHost}, options.connector)
+
     @_messageFetchInProgress = false
+    @_client = new Rest _.extend({}, {host: @sphereHost}, options.connector)
 
     @referenceCacheOptions = options.referenceCacheOptions or {max: 1000, maxAge: 60 * 60 * 1000}
     @referenceCache = cache @referenceCacheOptions
@@ -391,3 +392,4 @@ class ErrorStatusCode extends Error
     Error.captureStackTrace this, this
 
 exports.SphereService = SphereService
+exports.ErrorStatusCode = ErrorStatusCode
