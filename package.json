@@ -1,7 +1,7 @@
 {
   "name": "sphere-message-processing",
   "description": "This node.js library is designed to provide an easy way to write a SPHERE.IO message processors.",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "homepage": "https://github.com/sphereio/sphere-message-processing.git",
   "author": {
     "name": "Oleg Ilyenko",
