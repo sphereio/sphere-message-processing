@@ -18,6 +18,7 @@ class SphereService
     @additionalMessageExpand = options.additionalMessageExpand or []
     @processorName = options.processorName
     @projectKey = options.connector.config.project_key
+    @projectProps = options.connector.config.props
     @_client = new Rest _.extend({}, {host: @sphereHost}, options.connector)
     @_messageFetchInProgress = false
 

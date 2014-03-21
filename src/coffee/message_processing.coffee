@@ -8,6 +8,7 @@ _s = require 'underscore.string'
 {MessageProcessor} = require '../lib/message_processor'
 {MessagePersistenceService} = require '../lib/message_persistence'
 {TaskQueue} = require '../lib/task_queue'
+{ProjectCredentialsConfig} = require 'sphere-node-utils'
 
 util = require '../lib/util'
 
@@ -22,10 +23,11 @@ class MessageProcessing
       processor: @processorName
 
     @stats = new Stats _.extend({}, defaultStatsOptions, @statsOptions)
-    @sourceProjects = util.parseProjectsCredentials @argv.sourceProjects
     @requestQueue = new TaskQueue @stats, {maxParallelTasks: @argv.maxParallelSphereConnections}
 
   _createMessageProcessor: () ->
+    @sourceProjects = util.parseProjectsCredentials @credentialsConfig, @argv.sourceProjects
+
     new MessageProcessor @stats,
       messageSources:
         _.map @sourceProjects, (project) =>
@@ -47,18 +49,26 @@ class MessageProcessing
       heartbeatInterval: @argv.heartbeatInterval
 
   run: (fn) ->
-    @stats.startServer(@argv.statsPort)
+    ProjectCredentialsConfig.create()
+    .then (cfg) =>
+      @credentialsConfig = cfg
 
-    if fn?
-      @processors.push fn(@argv, @stats, @requestQueue)
+      @stats.startServer @argv.statsPort
 
-    @messageProcessor = @_createMessageProcessor()
-    @messageProcessor.run()
+      if fn?
+        @processors.push fn(@argv, @stats, @requestQueue, @credentialsConfig)
 
-    if @argv.printStats
-      @stats.startPrinter(true)
+      @messageProcessor = @_createMessageProcessor()
+      @messageProcessor.run()
 
-    console.info "Processor '#{@processorName}' started."
+      if @argv.printStats
+        @stats.startPrinter(true)
+
+      console.info "Processor '#{@processorName}' started."
+    .fail (error) ->
+      console.error "Error during getting project credentials config"
+      console.error error.stack
+    .done()
 
   @builder: () ->
     new MessageProcessingBuilder

@@ -12,3 +12,5 @@ coverage
 *.sh
 run.coffee
 run.js
+
+.sphere-project-credentials

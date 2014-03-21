@@ -6,17 +6,38 @@ _s = require 'underscore.string'
   Module has some utility functions
 ###
 module.exports =
-  parseProjectsCredentials: (str) ->
+  parseProjectsCredentials: (credentialsConfig, str) ->
     if not str?
       []
     else
-      _.map str.split(/,/), (c) ->
+      _.map str.split(/,/), (c) =>
         parts = c.split /:/
 
-        if _.size(parts) is not 3
-          throw new Error "project credentions format is wrong!"
+        if _.size(parts) is 1
+          _.extend {}, credentialsConfig.forProjectKey parts[0], {props: {}}
+        else if _.size(parts) is 2
+          _.extend {}, credentialsConfig.forProjectKey(parts[0]), {props: @_parseProjectParams(parts[1])}
+        else if _.size(parts) is 3
+          {project_key: parts[0], client_id: parts[1], client_secret: parts[2], props: {}}
+        else if _.size(parts) is 4
+          {project_key: parts[0], client_id: parts[1], client_secret: parts[2], props: @_parseProjectParams(parts[3])}
         else
-          {project_key: parts[0], client_id: parts[1], client_secret: parts[2]}
+          throw new Error("Invalid project fields count")
+
+  _parseProjectParams: (str) ->
+    res = {}
+
+    _.each str.split(/;/), (p) =>
+      parts = p.split /\=/
+
+      if _.size(parts) is 1
+        res[parts[0]] = true
+      else if _.size(parts) is 2
+        res[parts[0]] = parts[1]
+      else
+        throw new Error("Invalid projects parameter definition (only one `=` is allowed)")
+
+    res
 
   parseDate: (str) ->
     new Date(str)
