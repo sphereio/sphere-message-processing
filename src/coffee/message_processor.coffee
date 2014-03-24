@@ -9,6 +9,7 @@ class MessageProcessor
     @heartbeatInterval = options.heartbeatInterval or 2000
 
     @recycleBin = @_createRecycleBin()
+    @messageTypeMeters = {}
     @unrecoverableErrors = @_createUnrecoverableErrorProcessor @recycleBin
     @errors = @_createErrorProcessor @unrecoverableErrors, @recycleBin
 
@@ -30,6 +31,15 @@ class MessageProcessor
 
     @_doProcessMessages locked
     .subscribe @_ignoreCompleted(@recycleBin)
+
+  _getMessageTypeMeter: (msg, name) ->
+    meter = @messageTypeMeters[msg.payload.type + '.' + name]
+
+    if not meter
+      meter = @stats.addCustomMeter msg.payload.type, name
+      @messageTypeMeters[msg.payload.type + '.' + name] = meter
+
+    meter
 
   _doProcessMessages: (lockedMessages) ->
     toUnlock = new Rx.Subject()
@@ -79,6 +89,7 @@ class MessageProcessor
     .flatMap (msg) =>
       subj = new Rx.Subject()
 
+      @_getMessageTypeMeter(msg, "processed").mark()
       msg.persistence.reportSuccessfullProcessing msg
       .then (msg) ->
         subj.onNext(msg)
@@ -156,6 +167,8 @@ class MessageProcessor
       subj = new Rx.Subject()
 
       @stats.processingError msg
+      @_getMessageTypeMeter(msg.message, "failed").mark()
+
       msg.message.persistence.reportMessageProcessingFailure msg.message, msg.error, msg.processor
       .then ->
         console.error "Error during: #{msg.processor}. Error would be save in the custom object.", msg.message.payload
