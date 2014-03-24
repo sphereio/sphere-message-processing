@@ -28,25 +28,26 @@ class MessageProcessing
   _createMessageProcessor: () ->
     @sourceProjects = util.parseProjectsCredentials @credentialsConfig, @argv.sourceProjects
 
-    new MessageProcessor @stats,
-      messageSources:
-        _.map @sourceProjects, (project) =>
-          project.user_agent = @processorName
+    sphereServicesPs = _.map @sourceProjects, (project) =>
+      project.user_agent = @processorName
 
-          sphereService = new SphereService @stats,
-            sphereHost: @argv.sphereHost
-            requestQueue: @requestQueue
-            messagesPageSize: @argv.messagesPageSize
-            additionalMessageCriteria: @messageCriteria
-            additionalMessageExpand: @messageExpand
-            fetchHours: @argv.fetchHours
-            processorName: @processorName
-            connector:
-              config: project
-          new MessagePersistenceService @stats, sphereService,
-            awaitTimeout: @argv.awaitTimeout
-      processors: @processors
-      heartbeatInterval: @argv.heartbeatInterval
+      SphereService.create @stats,
+        sphereHost: @argv.sphereHost
+        requestQueue: @requestQueue
+        messagesPageSize: @argv.messagesPageSize
+        additionalMessageCriteria: @messageCriteria
+        additionalMessageExpand: @messageExpand
+        fetchHours: @argv.fetchHours
+        processorName: @processorName
+        connector:
+          config: project
+
+    Q.all sphereServicesPs
+    .then (sphereServices) =>
+      new MessageProcessor @stats,
+        messageSources: _.map(sphereServices, (sphere) => new MessagePersistenceService(@stats, sphere, {awaitTimeout: @argv.awaitTimeout}))
+        processors: @processors
+        heartbeatInterval: @argv.heartbeatInterval
 
   run: (fn) ->
     ProjectCredentialsConfig.create()
@@ -55,10 +56,18 @@ class MessageProcessing
 
       @stats.startServer @argv.statsPort
 
-      if fn?
-        @processors.push fn(@argv, @stats, @requestQueue, @credentialsConfig)
+      processor =
+        if fn?
+          fn(@argv, @stats, @requestQueue, @credentialsConfig)
+        else
+          Q(null)
 
-      @messageProcessor = @_createMessageProcessor()
+      Q.all [processor, @_createMessageProcessor()]
+    .then ([processor, messageProcessor]) =>
+      if processor?
+        @processors.push processor
+
+      @messageProcessor = messageProcessor
       @messageProcessor.run()
 
       if @argv.printStats

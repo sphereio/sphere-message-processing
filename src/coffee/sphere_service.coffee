@@ -4,11 +4,16 @@ Q = require 'q'
 {Rest} = require 'sphere-node-connect'
 {TaskQueue} = require '../lib/task_queue'
 {Pagger} = require '../lib/pagger'
+{Repeater} = require '../lib/repeater'
 util = require '../lib/util'
 cache = require 'lru-cache'
 
 class SphereService
+  @create: (stats, options) ->
+    (new SphereService(stats, options))._init()
+
   constructor: (@stats, options) ->
+    @accessTokenExpirationBeforeRenewalMs = options.accessTokenExpirationBeforeRenewalMs or (2 * 60 * 60 * 1000) # 2h
     @sphereHost = options.sphereHost
     @fetchHours = options.fetchHours
     @statsPrefix = options.statsPrefix or ""
@@ -34,6 +39,60 @@ class SphereService
 
     @stats.cacheClearCommands.subscribe =>
       @referenceCache.reset()
+
+  _init: () ->
+    @_renewAccessToken()
+    .then =>
+      @_startAccessTokenRenewalTask()
+      this
+
+  _startAccessTokenRenewalTask: () ->
+    Rx.Observable.interval(10 * 60 * 1000)
+    .subscribe =>
+      if @_getRemainingAccessTokenTimeMs() < @accessTokenExpirationBeforeRenewalMs
+        @_renewAccessToken()
+        .then ->
+          console.error "Sccess token renewed #{new Date}"
+        .fail (error) ->
+          console.error "Failed to renew access token!! #{new Date()}"
+          console.error error.stack
+        .done()
+
+  _getRemainingAccessTokenTimeMs: () ->
+    (@_accessToken.gotAt.getTime() + (@_accessToken.expires_in * 1000)) - Date.now()
+
+  _renewAccessToken: () ->
+    new Repeater {attempts: 10}
+    .execute
+      recoverableError: (e) ->
+        console.error "Failed to get access token. Retrying...", e.message
+        true
+      task: =>
+        @_getOAuthToken()
+        .then (token) =>
+          @_accessToken = token
+          @_accessToken.gotAt = new Date()
+
+          # Not nice, but should work for the moment being
+          @_client._options.access_token = token.access_token
+          @_client._options.headers['Authorization'] = "Bearer #{token.access_token}"
+
+  _getOAuthToken: () ->
+    d = Q.defer()
+
+    @requestMeter.mark()
+    stopwatch = @requestTimer.start()
+    @_client._oauth.getAccessToken (error, response, body) =>
+      stopwatch.end()
+
+      if error
+        d.reject error
+      else if response.statusCode is 200 or response.statusCode is 201
+        d.resolve body
+      else
+        d.reject new ErrorStatusCode(response.statusCode, body)
+
+    d.promise
 
   _get: (path) ->
     @requestQueue.addTask =>
