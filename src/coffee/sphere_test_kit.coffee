@@ -223,8 +223,8 @@ class  SphereTestKit
     sphereTestKit.setupProject()
     .then (kit) ->
       console.info "Done"
-#     kit.scheduleStateTransitions()
-      kit.addSomeDeliveries()
+      kit.scheduleStateTransitions()
+#      kit.addSomeDeliveries()
     #  sphereService.getRecentMessages(util.addDateTime(new Date(), -3, 0, 0))
     .then (foo) ->
       console.info _.size(foo)

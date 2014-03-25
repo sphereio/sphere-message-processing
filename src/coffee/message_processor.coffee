@@ -89,7 +89,11 @@ class MessageProcessor
     .flatMap (msg) =>
       subj = new Rx.Subject()
 
-      @_getMessageTypeMeter(msg, "processed").mark()
+      if msg.result.ignored
+        @_getMessageTypeMeter(msg, "ignored").mark()
+      else
+        @_getMessageTypeMeter(msg, "processed").mark()
+
       msg.persistence.reportSuccessfullProcessing msg
       .then (msg) ->
         subj.onNext(msg)
