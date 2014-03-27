@@ -347,12 +347,37 @@ class SphereService
       {quantity: quantity, fromState: fromState, toState: toState, date: date}
     ]
 
+  transitionCustomLineItemState: (order, lineItemId, quantity, fromState, toState, date) ->
+    @transitionCustomLineItemStates order, lineItemId, [
+      {quantity: quantity, fromState: fromState, toState: toState, date: date}
+    ]
+
   # transition json: quantity, fromState, toState, date
   transitionLineItemStates: (order, lineItemId, transitions) ->
     actions = _.map transitions, (t) ->
       action =
         action: 'transitionLineItemState'
         lineItemId: lineItemId
+        quantity: t.quantity
+        fromState: t.fromState
+        toState: t.toState
+
+      if t.date?
+        action.actualTransitionDate = t.date
+
+      action
+
+    json =
+      version: order.version
+      actions: actions
+
+    @_post "/orders/#{order.id}", json
+
+  transitionCustomLineItemStates: (order, lineItemId, transitions) ->
+    actions = _.map transitions, (t) ->
+      action =
+        action: 'transitionCustomLineItemState'
+        customLineItemId: lineItemId
         quantity: t.quantity
         fromState: t.fromState
         toState: t.toState
