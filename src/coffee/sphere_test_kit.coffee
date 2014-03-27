@@ -1,6 +1,7 @@
 Rx = require 'rx'
 Q = require 'q'
 {_} = require 'underscore'
+{ErrorStatusCode} = require './sphere_service'
 
 class  SphereTestKit
   stateDefs: [
@@ -9,6 +10,11 @@ class  SphereTestKit
     {key: "C", transitions: ["D"]}
     {key: "D", transitions: ["E"]}
     {key: "E", transitions: ["A"]}
+
+    {key: "ReadyForShipment", transitions: ["Pickup"]}
+    {key: "Pickup", transitions: ["Shipped"]}
+    {key: "Shipped", transitions: ["Finished"]}
+    {key: "Finished", transitions: ["ReadyForShipment"]}
   ]
 
   channelDefs: [
@@ -44,6 +50,10 @@ class  SphereTestKit
       console.info _.map(@orders, (o)-> "\"#{o.retailerOrder.id}\"").join(',')
       console.info "\n"
 
+      this
+    .then =>
+      @addSotock(@orders[0].retailerOrder.lineItems[0].variant.sku, 1000000)
+    .then =>
       console.info "Project setup finished"
       this
 
@@ -56,22 +66,33 @@ class  SphereTestKit
   stateById: (id) ->
     _.find @states, (s) -> s.id == id
 
-  transitionRetailerOrderStates: () ->
+  abcStateSwitch: (currKey) ->
+    switch currKey
+      when'A' then 'B'
+      when'B' then 'D'
+      when'D' then 'E'
+      when'E' then 'A'
+      else throw new Error("Unsupported state #{currKey}")
+
+  shipmentStateSwitch: (currKey) ->
+    switch currKey
+      when'ReadyForShipment' then 'Pickup'
+      when'Pickup' then 'Shipped'
+      when'Shipped' then 'Finished'
+      when'Finished' then 'ReadyForShipment'
+      else throw new Error("Unsupported state #{currKey}")
+
+  transitionRetailerOrderStates: (first, newStateFn) ->
     ps = _.map @orders, (os) =>
       currStates = _.filter os.retailerOrder.lineItems[0].state, (s) => s.state.id != @initialState.id
 
       p = if _.isEmpty(currStates)
-        @sphere.transitionLineItemState os.retailerOrder, os.retailerOrder.lineItems[0].id, 20, @ref('state', @initialState), @ref('state', @stateByKey('A'))
+        @sphere.transitionLineItemState os.retailerOrder, os.retailerOrder.lineItems[0].id, 20, @ref('state', @initialState), @ref('state', @stateByKey(first))
       else
         currStateId = currStates[0].state.id
         currStateQ = currStates[0].quantity
 
-        newState = switch @stateById(currStateId).key
-          when'A' then @stateByKey 'B'
-          when'B' then @stateByKey 'D'
-          when'D' then @stateByKey 'E'
-          when'E' then @stateByKey 'A'
-          else throw new Error("Unsupported state #{@stateById(currStateId).key}")
+        newState = @stateByKey newStateFn(@stateById(currStateId).key)
 
         @sphere.transitionLineItemState os.retailerOrder, os.retailerOrder.lineItems[0].id, currStateQ, @ref('state', {id: currStateId}), @ref('state', newState)
 
@@ -81,10 +102,10 @@ class  SphereTestKit
         newOrder
     Q.all ps
 
-  scheduleStateTransitions: () ->
+  scheduleStateTransitions: (first, stateSwitch) ->
     Rx.Observable.interval 2000
     .subscribe =>
-      @transitionRetailerOrderStates()
+      @transitionRetailerOrderStates(first, stateSwitch)
       .then ->
         console.info "Transition finished"
       .fail (error) ->
@@ -218,12 +239,20 @@ class  SphereTestKit
 
     Q.all ps
 
+  addSotock: (sku, quantity) ->
+    @sphere.getInvetoryEntryBySkuAndChannel sku, null
+    .then (ie) =>
+      @sphere.addInventoryQuantity ie, quantity - ie.availableQuantity
+    .fail (e) =>
+      @sphere.createInventoryEntry sku, quantity
+
   @run: (sphereService) ->
     sphereTestKit = new SphereTestKit sphereService
     sphereTestKit.setupProject()
     .then (kit) ->
       console.info "Done"
-      kit.scheduleStateTransitions()
+#      kit.scheduleStateTransitions "A", kit.abcStateSwitch
+      kit.scheduleStateTransitions "ReadyForShipment", kit.shipmentStateSwitch
 #      kit.addSomeDeliveries()
     #  sphereService.getRecentMessages(util.addDateTime(new Date(), -3, 0, 0))
     .then (foo) ->

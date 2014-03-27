@@ -478,6 +478,47 @@ class SphereService
   getOrderById: (id) ->
     @_get "/orders/#{id}"
 
+  getInvetoryEntryBySkuAndChannel: (sku, channelRef) ->
+    skuQuery = "sku=\"#{sku}\""
+    channelQuery =
+      if channelRef?
+        "supplyChannel(id=\"#{channelRef.id}\")"
+      else
+        "supplyChannel is not defined"
+
+    query = "#{skuQuery} and #{channelQuery}"
+
+    @_get @_pathWhere("/inventory", query)
+    .then (results) ->
+      if results.total == 0
+        Q.reject new Error("Can't find inventory by SKU '#{sku}' and channel '#{if channelRef? then channelRef.id else 'none'}'.")
+      else if results.total > 1
+        Q.reject new Error("More than one inventory found for for the query: '#{query}'.")
+      else
+        results.results[0]
+
+  removeInventoryQuantity: (inventoryEntry, quantity) ->
+    json =
+      version: inventoryEntry.version
+      actions: [{action: 'removeQuantity', quantity: quantity}]
+
+    @_post "/inventory/#{inventoryEntry.id}", json
+
+  addInventoryQuantity: (inventoryEntry, quantity) ->
+    json =
+      version: inventoryEntry.version
+      actions: [{action: 'addQuantity', quantity: quantity}]
+
+    @_post "/inventory/#{inventoryEntry.id}", json
+
+  createInventoryEntry: (sku, quantity) ->
+    json =
+      sku: sku
+      quantityOnStock: quantity
+
+    @_post "/inventory", json
+
+
 class ErrorStatusCode extends Error
   constructor: (@code, @body) ->
     @message = "Status code is #{@code}: #{JSON.stringify @body}"
