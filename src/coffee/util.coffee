@@ -33,7 +33,12 @@ module.exports =
       if _.size(parts) is 1
         res[parts[0]] = true
       else if _.size(parts) is 2
-        res[parts[0]] = parts[1]
+        if res[parts[0]]? and _.isArray(res[parts[0]])
+          res[parts[0]] = res[parts[0]].concat(parts[1])
+        else if res[parts[0]]?
+          res[parts[0]] = [res[parts[0]], parts[1]]
+        else
+          res[parts[0]] = parts[1]
       else
         throw new Error("Invalid projects parameter definition (only one `=` is allowed)")
 
