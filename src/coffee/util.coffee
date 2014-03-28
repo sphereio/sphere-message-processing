@@ -27,7 +27,7 @@ module.exports =
   _parseProjectParams: (str) ->
     res = {}
 
-    _.each str.split(/;/), (p) ->
+    _.each str.split(/\//), (p) ->
       parts = p.split /\=/
 
       if _.size(parts) is 1
