@@ -255,7 +255,7 @@ class SphereService
 
   _pathWhere: (path, where, sort = [], expand = [], limit = 100, offset = 0) ->
     sorting = if not _.isEmpty(sort) then "&" + _.map(sort, (s) -> "sort=" + encodeURIComponent(s)).join("&") else ""
-    expanding = if not _.isEmpty(sort) then "&" + _.map(expand, (e) -> "expand=" + encodeURIComponent(e)).join("&") else ""
+    expanding = if not _.isEmpty(expand) then "&" + _.map(expand, (e) -> "expand=" + encodeURIComponent(e)).join("&") else ""
 
     "#{path}?where=#{encodeURIComponent(where)}#{sorting}#{expanding}&limit=#{limit}&offset=#{offset}"
 
