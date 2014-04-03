@@ -3,6 +3,7 @@ Q = require 'q'
 {_} = require 'underscore'
 cache = require 'lru-cache'
 measured = require 'measured'
+{LoggerFactory} = require '../lib/logger'
 
 class MessagePersistenceService
   constructor: (@stats, @sphere, options) ->
@@ -10,6 +11,7 @@ class MessagePersistenceService
     @awaitTimeout = options.awaitTimeout or 120000
     @sequenceNumberCacheOptions = options.sequenceNumberCacheOptions or {max: 20000, maxAge: 20 * 1000}
     @processedMessagesCacheOptions = options.processedMessagesCacheOptions or {max: 30000, maxAge: 24 * 60 * 60 * 1000}
+    @logger = LoggerFactory.getLogger "persistence.#{@getSourceInfo().prefix}", options.logger
 
     @processedMessages = []
     @localLocks = []
@@ -173,7 +175,7 @@ class MessagePersistenceService
       msg
 
   _messageHasLowSequenceNumber: (msg) ->
-    console.info "WARN: message has appeared twice for processing (something wrong in the pipeline)", msg.payload
+    @logger.warn "Message has appeared twice for processing (something wrong in the pipeline). Message: #{JSON.stringify msg.payload}"
 
   _doSinkMessage: (sn, box) ->
     doSink = () ->

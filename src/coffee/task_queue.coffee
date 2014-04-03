@@ -6,6 +6,7 @@ class TaskQueue
   constructor: (@stats, options) ->
     if not options.maxParallelTasks?
       throw new Error("maxParallelTasks is undefined :(")
+
     @_maxParallelTasks = options.maxParallelTasks
     @_queue = []
     @_activeCount = 0

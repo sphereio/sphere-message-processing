@@ -5,6 +5,7 @@ Q = require 'q'
 {TaskQueue} = require '../lib/task_queue'
 {Pagger} = require '../lib/pagger'
 {Repeater} = require '../lib/repeater'
+{LoggerFactory} = require '../lib/logger'
 util = require '../lib/util'
 cache = require 'lru-cache'
 
@@ -24,6 +25,7 @@ class SphereService
     @processorName = options.processorName
     @projectKey = options.connector.config.project_key
     @projectProps = options.connector.config.props
+    @logger = LoggerFactory.getLogger "sphere.#{@projectKey}", options.logger
 
     @_messageFetchInProgress = false
     @_client = new Rest _.extend({}, {host: @sphereHost}, options.connector)
@@ -51,11 +53,10 @@ class SphereService
     .subscribe =>
       if @_getRemainingAccessTokenTimeMs() < @accessTokenExpirationBeforeRenewalMs
         @_renewAccessToken()
-        .then ->
-          console.error "Sccess token renewed #{new Date}"
-        .fail (error) ->
-          console.error "Failed to renew access token!! #{new Date()}"
-          console.error error.stack
+        .then =>
+          @logger.info "Sccess token renewed!"
+        .fail (error) =>
+          @logger.error "Failed to renew access token!!", error
         .done()
 
   _getRemainingAccessTokenTimeMs: () ->
@@ -64,8 +65,8 @@ class SphereService
   _renewAccessToken: () ->
     new Repeater {attempts: 10}
     .execute
-      recoverableError: (e) ->
-        console.error "Failed to get access token. Retrying...", e.message
+      recoverableError: (e) =>
+        @logger.error "Failed to get access token. Retrying... Message #{JSON.stringify e.message}"
         true
       task: =>
         @_getOAuthToken()
@@ -82,7 +83,7 @@ class SphereService
 
     @requestMeter.mark()
     stopwatch = @requestTimer.start()
-    @_client._oauth.getAccessToken (error, response, body) =>
+    @_client._oauth.getAccessToken (error, response, body) ->
       stopwatch.end()
 
       if error
@@ -176,8 +177,7 @@ class SphereService
         onNextPage: (offset, limit) =>
           @getRecentMessages limitDate, offset, limit
         onError: (error) =>
-          console.error "Error during message fetch!"
-          console.error error.stack
+          @logger.error "Error during message fetch!", error
           @stats.reportMessageFetchError()
         onFinish: =>
           @_messageFetchInProgress = false

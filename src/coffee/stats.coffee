@@ -3,6 +3,7 @@ Q = require 'q'
 {_} = require 'underscore'
 express = require 'express'
 measured = require 'measured'
+{LoggerFactory} = require '../lib/logger'
 
 class Meter
   constructor: (name, units) ->
@@ -23,6 +24,7 @@ class Stats
   constructor: (options) ->
     @processor = options.processor
     @units = options.units or [{name: "Second", rateUnit: 1000}, {name: "Minute", rateUnit: 60 * 1000}]
+    @logger = LoggerFactory.getLogger 'stats', options.logger
     @started = new Date()
     @panicMode = false
     @paused = false
@@ -169,7 +171,7 @@ class Stats
   _initiateSelfDestructionSequence: ->
     Rx.Observable.interval(500).subscribe =>
       if @messagesInProgress() is 0
-        console.info "Graceful exit", @toJSON()
+        @logger.info "Graceful exit #{JSON.stringify @toJSON()}",
         process.exit 0
 
   startServer: (port) ->
@@ -212,14 +214,14 @@ class Stats
         res.json
           message: "Done."
 
-    statsApp.listen port, ->
-      console.log "Statistics is on port #{port}"
+    statsApp.listen port, =>
+      @logger.info "Statistics is on port #{port}"
 
   startPrinter: (countOnly = false) ->
     Rx.Observable.interval(3000).subscribe =>
-      console.info "+---------------- STATS ----------------+"
-      console.info @toJSON(countOnly)
-      console.info "+----------------- END -----------------+"
+      @logger.info "+---------------- STATS ----------------+"
+      @logger.info JSON.stringify(@toJSON(countOnly))
+      @logger.info "+----------------- END -----------------+"
 
 exports.Meter = Meter
 exports.Stats = Stats

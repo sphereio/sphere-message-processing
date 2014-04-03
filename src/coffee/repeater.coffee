@@ -6,7 +6,7 @@ class Repeater
   constructor: (options) ->
     @_attempts = options.attempts
     @_timeout = options.timeout or 100
-    @_timeoutType = options.timeoutType
+    @_timeoutType = options.timeoutType or 'variable'
 
   execute: (options) ->
     d = Q.defer()
@@ -36,8 +36,10 @@ class Repeater
   _calculateDelay: (attemptsLeft) ->
     if @_timeoutType is 'constant'
       @_timeout
-    else
+    else if @_timeoutType is 'variable'
       tried = @_attempts - attemptsLeft - 1
       (@_timeout * tried) + _.random(50, @_timeout)
+    else
+      throw new Error("unsupported timeout type: #{@_timeoutType}")
 
 exports.Repeater = Repeater

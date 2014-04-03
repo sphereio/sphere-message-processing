@@ -65,3 +65,9 @@ module.exports =
 
   formatDate: (date) ->
     date.toISOString()
+
+  abstractMethod: ->
+    throw new Error('Abstract method not implemented!')
+
+  notImplementedYet: ->
+    throw new Error('Method not implemented!')

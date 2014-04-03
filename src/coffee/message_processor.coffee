@@ -1,12 +1,14 @@
 Rx = require 'rx'
 Q = require 'q'
 {_} = require 'underscore'
+{LoggerFactory} = require '../lib/logger'
 
 class MessageProcessor
   constructor: (@stats, options) ->
     @messageProcessors = options.processors # Array[(SourceInfo, Message) => Promise[Anything]]
     @messageSources = options.messageSources
     @heartbeatInterval = options.heartbeatInterval or 2000
+    @logger = LoggerFactory.getLogger "processor.#{options.processorName}", options.logger
 
     @recycleBin = @_createRecycleBin()
     @messageTypeMeters = {}
@@ -151,11 +153,12 @@ class MessageProcessor
         msg.stopwatch.end()
       msg.persistence.releaseLocalLock msg
       @stats.messageFinished msg
-    errorFn = (error) ->
-      console.error error.stack
-    completeFn = ->
-      console.error "Recycle Bin completed! This should never happen!!"
-      console.error new Error().stack
+
+    errorFn = (error) =>
+      @logger.error "Error came to the recycle bin.", error
+
+    completeFn = =>
+      @logger.error "Recycle Bin completed!", new Error("Recycle Bin completed! This should never happen!!")
 
     recycleBin
     .subscribe Rx.Observer.create(nextFn, errorFn, completeFn)
@@ -174,9 +177,8 @@ class MessageProcessor
       @_getMessageTypeMeter(msg.message, "failed").mark()
 
       msg.message.persistence.reportMessageProcessingFailure msg.message, msg.error, msg.processor
-      .then ->
-        console.error "Error during: #{msg.processor}. Error would be save in the custom object.", msg.message.payload
-        console.error msg.error.stack
+      .then =>
+        @logger.error "Error during: #{msg.processor}. Error would be saved in the custom object. Message: #{JSON.stringify msg.message.payload}", msg.error
 
         subj.onNext msg.message
         subj.onCompleted()
@@ -194,16 +196,15 @@ class MessageProcessor
     errorProcessor = new Rx.Subject()
 
     errorProcessor
-    .map (box) ->
+    .map (box) =>
       if box?
         if box.message?
-          console.error "Error during: #{box.processor}.", box.message.payload
+          @logger.error "Error during: #{box.processor}. Message: #{JSON.stringify box.message.payload}", box.error
         else
-          console.error "Error during: #{box.processor}.", "No message"
-
-        console.error box.error.stack
+          @logger.error "Error during: #{box.processor}. No message.", box.error
       else
-        console.error "Some strange error happend, nut not shure want exactly :( Please review the message processing pipeline."
+        @logger.error "Some strange error happend, but not shure want exactly :( Please review the message processing pipeline."
+
       box.message
     .subscribe recycleBin
 

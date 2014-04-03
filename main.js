@@ -7,6 +7,7 @@ task_queue = require('./lib/task_queue')
 pagger = require('./lib/pagger')
 repeater = require('./lib/repeater')
 util = require('./lib/util')
+logger = require('./lib/logger')
 
 exports.SphereService = sphere_service.SphereService
 exports.ErrorStatusCode = sphere_service.ErrorStatusCode
@@ -19,5 +20,7 @@ exports.MessageProcessingBuilder = message_processing.MessageProcessingBuilder
 exports.TaskQueue = task_queue.TaskQueue
 exports.Pagger = pagger.Pagger
 exports.Repeater = repeater.Repeater
+exports.LoggerFactory = logger.LoggerFactory
+exports.Logger = logger.Logger
 
 exports.util = util

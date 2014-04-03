@@ -2,6 +2,7 @@ Rx = require 'rx'
 Q = require 'q'
 {_} = require 'underscore'
 {ErrorStatusCode} = require './sphere_service'
+{LoggerFactory} = require '../lib/logger'
 
 class  SphereTestKit
   stateDefs: [
@@ -26,6 +27,7 @@ class  SphereTestKit
   ]
 
   constructor: (@sphere) ->
+    @logger = LoggerFactory.getLogger "test-kit.#{@sphere.getSourceInfo().prefix}"
 
   setupProject: ->
     Q.all [
@@ -44,17 +46,18 @@ class  SphereTestKit
         [m, r] = os
         {retailerOrder: r, masterOrder: m}
 
-      console.info "Orders"
-      _.each @orders, (o, i) ->
-        console.info i, "Retailer: #{o.retailerOrder.id}, Master: #{o.masterOrder.id}"
-      console.info _.map(@orders, (o)-> "\"#{o.retailerOrder.id}\"").join(',')
-      console.info "\n"
+      @logger.info "Orders"
+
+      _.each @orders, (o, i) =>
+        @logger.info "#{i} Retailer: #{o.retailerOrder.id}, Master: #{o.masterOrder.id}"
+
+      @logger.info _.map(@orders, (o)-> "\"#{o.retailerOrder.id}\"").join(',')
 
       this
     .then =>
       @addSotock(@orders[0].retailerOrder.lineItems[0].variant.sku, 1000000)
     .then =>
-      console.info "Project setup finished"
+      @logger.info "Project setup finished"
       this
 
   ref: (type, obj) ->
@@ -106,11 +109,10 @@ class  SphereTestKit
     Rx.Observable.interval 2000
     .subscribe =>
       @transitionRetailerOrderStates(first, stateSwitch)
-      .then ->
-        console.info "Transition finished"
-      .fail (error) ->
-        console.error "Error during state transition"
-        console.error error
+      .then =>
+        @logger.info "Transition finished"
+      .fail (error) =>
+        @logger.error "Error during state transition", error
       .done()
 
   configureStates: ->
@@ -120,28 +122,28 @@ class  SphereTestKit
     ]
     .then (states) =>
       [[@initialState], @states] = states
-      console.info "States configured"
+      @logger.info "States configured"
       [@initialState, @states]
 
   configureChannels: ->
     @sphere.ensureChannels @channelDefs
     .then (channels) =>
       [@masterChannel] = channels
-      console.info "Channels configured"
+      @logger.info "Channels configured"
       @masterChannel
 
   configureProduct: () ->
     @sphere.getFirstProduct()
     .then (product) =>
       @product = product
-      console.info "Product found"
+      @logger.info "Product found"
       product
 
   configureTaxCategory: () ->
     @sphere.ensureTaxCategories @taxCategoryDefs
     .then (tc) =>
       [@taxCategory] = tc
-      console.info "Tax category configured"
+      @logger.info "Tax category configured"
       tc
 
   _orderJson: () ->
@@ -233,8 +235,8 @@ class  SphereTestKit
       @sphere.addDelivery o.retailerOrder, [{id: o.retailerOrder.lineItems[0].id, quantity: 4}]
       .then (o1) =>
         @sphere.addParcel o1, o1.shippingInfo.deliveries[0].id, {heightInMillimeter: 11, lengthInMillimeter: 22, widthInMillimeter: 33, weightInGram: 44}, {trackingId: "ABCD123", carrier: "DHL"}
-      .then (o2) ->
-        console.info "Finished with deliveries: #{o2.id}"
+      .then (o2) =>
+        @logger.info "Finished with deliveries: #{o2.id}"
         o.retailerOrder = o2
 
     Q.all ps

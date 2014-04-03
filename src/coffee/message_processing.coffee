@@ -11,16 +11,22 @@ _s = require 'underscore.string'
 {ProjectCredentialsConfig} = require 'sphere-node-utils'
 
 util = require '../lib/util'
+{LoggerFactory} = require '../lib/logger'
 
 class MessageProcessing
   constructor: (@argv, @statsOptions, @processors, @messageCriteria, @messageExpand, @defaultProcessorName) ->
     @processorName = @argv.processorName or @defaultProcessorName
+
+    LoggerFactory.setLevel argv.logLevel
+
+    @rootLogger = LoggerFactory.getLogger 'processing'
 
     if not @processorName?
       throw new Error("Processor name is not defined")
 
     defaultStatsOptions =
       processor: @processorName
+      logger: @rootLogger
 
     @stats = new Stats _.extend({}, defaultStatsOptions, @statsOptions)
     @requestQueue = new TaskQueue @stats, {maxParallelTasks: @argv.maxParallelSphereConnections}
@@ -39,15 +45,18 @@ class MessageProcessing
         additionalMessageExpand: @messageExpand
         fetchHours: @argv.fetchHours
         processorName: @processorName
+        logger: @rootLogger
         connector:
           config: project
 
     Q.all sphereServicesPs
     .then (sphereServices) =>
       new MessageProcessor @stats,
-        messageSources: _.map(sphereServices, (sphere) => new MessagePersistenceService(@stats, sphere, {awaitTimeout: @argv.awaitTimeout}))
+        messageSources: _.map(sphereServices, (sphere) => new MessagePersistenceService(@stats, sphere, {awaitTimeout: @argv.awaitTimeout, logger: @rootLogger}))
         processors: @processors
         heartbeatInterval: @argv.heartbeatInterval
+        processorName: @processorName
+        logger: @rootLogger
 
   run: (fn) ->
     ProjectCredentialsConfig.create()
@@ -58,7 +67,7 @@ class MessageProcessing
 
       processor =
         if fn?
-          fn(@argv, @stats, @requestQueue, @credentialsConfig)
+          fn(@argv, @stats, @requestQueue, @credentialsConfig, @rootLogger)
         else
           Q(null)
 
@@ -73,10 +82,9 @@ class MessageProcessing
       if @argv.printStats
         @stats.startPrinter(true)
 
-      console.info "Processor '#{@processorName}' started."
-    .fail (error) ->
-      console.error "Error during getting project credentials config"
-      console.error error.stack
+      @rootLogger.info "Processor '#{@processorName}' started."
+    .fail (error) =>
+      @rootLogger.info "Error during getting project credentials config", error
     .done()
 
   @builder: () ->
@@ -128,6 +136,7 @@ class MessageProcessingBuilder
     .alias('sourceProjects', 's')
     .alias('statsPort', 'p')
     .alias('help', 'h')
+    .alias('logLevel', 'l')
     .describe('help', 'Shows usage info and exits.')
     .describe('sphereHost', 'Sphere.io host name.')
     .describe('sourceProjects', 'Sphere.io project credentials. The messages from these projects would be processed. Format: `prj1-key:clientId:clientSecret[,prj2-key:clientId:clientSecret][,...]`.')
@@ -139,12 +148,14 @@ class MessageProcessingBuilder
     .describe('fetchHours', 'How many hours of messages should be fetched (in hours).')
     .describe('maxParallelSphereConnections', 'How many parallel connection to sphere are allowed.')
     .describe('messagesPageSize', 'How many should be loaded in one go.')
+    .describe('logLevel', 'Loging intensity: debug|info|warn|error')
     .default('statsPort', 7777)
     .default('awaitTimeout', 120000)
     .default('heartbeatInterval', 2000)
     .default('fetchHours', 24)
     .default('messagesPageSize', 100)
     .default('maxParallelSphereConnections', 100)
+    .default('logLevel', 'debug')
     .default('sphereHost', 'api.sphere.io')
     .demand(@demand)
 
