@@ -14,34 +14,26 @@ util = require '../lib/util'
 {LoggerFactory} = require '../lib/logger'
 
 class MessageProcessing
-  constructor: (@argv, @statsOptions, @processors, @messageCriteria, @messageExpand, @defaultProcessorName) ->
-    @processorName = @argv.processorName or @defaultProcessorName
+  constructor: (@_argvFn, @statsOptions, @processors, @messageCriteria, @messageType, @messageExpand, @defaultProcessorName, @runFn) ->
 
-    LoggerFactory.setLevel argv.logLevel
-
-    @rootLogger = LoggerFactory.getLogger 'processing'
-
-    if not @processorName?
-      throw new Error("Processor name is not defined")
-
-    defaultStatsOptions =
-      processor: @processorName
-      logger: @rootLogger
-
-    @stats = new Stats _.extend({}, defaultStatsOptions, @statsOptions)
-    @requestQueue = new TaskQueue @stats, {maxParallelTasks: @argv.maxParallelSphereConnections}
-
-  _createMessageProcessor: () ->
+  _createMessageProcessor: (ids) ->
     @sourceProjects = util.parseProjectsCredentials @credentialsConfig, @argv.sourceProjects
 
     sphereServicesPs = _.map @sourceProjects, (project) =>
       project.user_agent = @processorName
 
+      messageCriteria =
+        if @messageType?
+          ids = if ids? then " and id in (#{_.map(ids, (id) -> '"' + id + '"').join(', ')})"
+          "resource(typeId=\"#{@messageType}\"#{ids})"
+        else
+          @messageCriteria
+
       SphereService.create @stats,
         sphereHost: @argv.sphereHost
         requestQueue: @requestQueue
         messagesPageSize: @argv.messagesPageSize
-        additionalMessageCriteria: @messageCriteria
+        additionalMessageCriteria: messageCriteria
         additionalMessageExpand: @messageExpand
         fetchHours: @argv.fetchHours
         processorName: @processorName
@@ -58,20 +50,50 @@ class MessageProcessing
         processorName: @processorName
         logger: @rootLogger
 
-  run: (fn) ->
+  init: (statsStartOptions = {}, aternativeArgv) ->
+    if not @_initialized
+      if aternativeArgv?
+        @argv = _.extend {}, @_argvFn(statsStartOptions.offline), aternativeArgv
+      else
+        @argv = @_argvFn()
+
+      @processorName = @argv.processorName or @defaultProcessorName
+
+      LoggerFactory.setLevel @argv.logLevel
+
+      @rootLogger = LoggerFactory.getLogger 'processing'
+
+      if not @processorName?
+        throw new Error("Processor name is not defined")
+
+      defaultStatsOptions =
+        processor: @processorName
+        logger: @rootLogger
+
+      @stats = new Stats _.extend({}, defaultStatsOptions, @statsOptions, statsStartOptions)
+      @requestQueue = new TaskQueue @stats, {maxParallelTasks: @argv.maxParallelSphereConnections}
+      @_offlineMode = statsStartOptions.offline
+      @_initialized = true
+
+    this
+
+  start: (ids) ->
+    @init()
+
     ProjectCredentialsConfig.create()
     .then (cfg) =>
       @credentialsConfig = cfg
 
-      @stats.startServer @argv.statsPort
+      if not @_offlineMode
+        @stats.startServer @argv.statsPort
 
       processor =
-        if fn?
-          fn(@argv, @stats, @requestQueue, @credentialsConfig, @rootLogger)
+        if @runFn?
+          @runFn(@argv, @stats, @requestQueue, @credentialsConfig, @rootLogger)
         else
           Q(null)
 
-      Q.all [processor, @_createMessageProcessor()]
+      Q.all [processor, @_createMessageProcessor(ids)]
     .then ([processor, messageProcessor]) =>
       if processor?
         @processors.push processor
@@ -79,13 +101,19 @@ class MessageProcessing
       @messageProcessor = messageProcessor
       @messageProcessor.run()
 
+
       if @argv.printStats
         @stats.startPrinter(true)
 
       @rootLogger.info "Processor '#{@processorName}' started."
     .fail (error) =>
-      @rootLogger.info "Error during getting project credentials config", error
+      @rootLogger.error "Error during getting project credentials config", error
     .done()
+
+    @stats.events()
+
+  stop: () ->
+    @stats.initiateSelfDestructionSequence()
 
   @builder: () ->
     new MessageProcessingBuilder
@@ -122,6 +150,10 @@ class MessageProcessingBuilder
     @additionalMessageCriteria = query
     this
 
+  messageType: (type) ->
+    @_messageType = type
+    this
+
   messageExpand: (expand) ->
     @additionalMessageExpand = expand
     this
@@ -130,7 +162,7 @@ class MessageProcessingBuilder
     @defaultProcessorName = pn
     this
 
-  build: () ->
+  build: (runFn) ->
     o = optimist
     .usage(@usage)
     .alias('sourceProjects', 's')
@@ -157,18 +189,23 @@ class MessageProcessingBuilder
     .default('maxParallelSphereConnections', 100)
     .default('logLevel', 'debug')
     .default('sphereHost', 'api.sphere.io')
-    .demand(@demand)
 
     if @optimistExtrasFn?
       @optimistExtrasFn o
 
-    argv = o.argv
+    argvFn = (offline) =>
+      if not offline
+        o = o.demand(@demand)
 
-    if (argv.help)
-      o.showHelp()
-      process.exit 0
+      argv = o.argv
 
-    new MessageProcessing argv, @statsOptions, @processors, @additionalMessageCriteria, @additionalMessageExpand, @defaultProcessorName
+      if not offline and argv.help
+        o.showHelp()
+        process.exit 0
+
+      argv
+
+    () => new MessageProcessing argvFn, @statsOptions, @processors, @additionalMessageCriteria, @_messageType, @additionalMessageExpand, @defaultProcessorName, runFn
 
 exports.MessageProcessing = MessageProcessing
 exports.MessageProcessingBuilder = MessageProcessingBuilder

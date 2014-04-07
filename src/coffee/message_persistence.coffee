@@ -34,7 +34,7 @@ class MessagePersistenceService
         @panicMode = panic
 
 
-    @stats.addStopListener =>
+    @stats.addStopListener ->
       cacheSubscription.dispose()
       panicSubscription.dispose()
 

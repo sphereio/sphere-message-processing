@@ -11,7 +11,10 @@ cache = require 'lru-cache'
 
 class SphereService
   @create: (stats, options) ->
-    (new SphereService(stats, options))._init()
+    try
+      (new SphereService(stats, options))._init()
+    catch e
+      Q.reject e
 
   constructor: (@stats, options) ->
     @accessTokenExpirationBeforeRenewalMs = options.accessTokenExpirationBeforeRenewalMs or (2 * 60 * 60 * 1000) # 2h

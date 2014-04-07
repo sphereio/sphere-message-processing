@@ -248,21 +248,30 @@ class  SphereTestKit
     .fail (e) =>
       @sphere.createInventoryEntry sku, quantity
 
-  @run: (sphereService) ->
+  @setupProject: (sphereService) ->
     sphereTestKit = new SphereTestKit sphereService
     sphereTestKit.setupProject()
-    .then (kit) ->
-      console.info "Done"
-#      kit.scheduleStateTransitions "A", kit.abcStateSwitch
-      kit.scheduleStateTransitions "ReadyForShipment", kit.shipmentStateSwitch
-#      kit.addSomeDeliveries()
-    #  sphereService.getRecentMessages(util.addDateTime(new Date(), -3, 0, 0))
-    .then (foo) ->
-      console.info _.size(foo)
-      console.info foo[0]
+
+  @cleanup = (done, subscription, processor) ->
+    if subscription?
+      subscription.dispose()
+
+    processor.stop()
+    .fail (error) =>
+      @logger.info "Error during processor cleanup", error
+
+  @reportSuccess: (done, subscription, processor) ->
+    @cleanup done, subscription, processor
+    .then ->
+      done()
     .fail (error) ->
-      console.error "Errror during setup"
-      console.error error.stack
+      done(error)
+    .done()
+
+  @reportFailure: (done, error, subscription, processor) ->
+    @cleanup done, subscription, processor
+    .finally ->
+      done(error)
     .done()
 
 exports.SphereTestKit = SphereTestKit

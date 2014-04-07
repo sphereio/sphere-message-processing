@@ -8,7 +8,7 @@ measured = require 'measured'
 class Meter
   constructor: (name, units) ->
     @meters = _.map units, (unit) ->
-      {unit: unit, name: "#{name}Per#{unit.name}", meter: {mark: (() -> "foo"), unref: (() -> "goo"), toJSON: (() -> {count: 0})}}
+      {unit: unit, name: "#{name}Per#{unit.name}", meter: new measured.Meter({rateUnit: unit.rateUnit})}
 
   mark: () ->
     _.each @meters, (meter) ->
@@ -53,17 +53,28 @@ class Stats
     @customMeters = []
     @customTimers = []
 
+    @_eventSubject = options.eventSubject or new Rx.Subject()
+
+    @cacheClearCommands = @_cacheClearCommandsObserver
     @_cacheClearCommandsObserver = new Rx.Subject()
     @cacheClearCommands = @_cacheClearCommandsObserver
 
     @_panicModeObserver = new Rx.BehaviorSubject()
     @panicModeEvents = @_panicModeObserver
+
     @_stopListeners = []
 
     @addStopListener =>
       @_cacheClearCommandsObserver.onCompleted()
       @_panicModeObserver.onCompleted()
+      @_eventSubject.onCompleted()
       @_unrefMeters()
+
+  events: () ->
+    @_eventSubject
+
+  postEvent: (event) ->
+    @_eventSubject.onNext(event)
 
   _unrefMeters: () ->
     # workaround until PR is merged: https://github.com/felixge/node-measured/pull/12
@@ -179,6 +190,7 @@ class Stats
 
   unlockedMessage: (msg) ->
     @unlockedMessages.mark()
+    @postEvent {type: 'unlock', message: msg}
 
   messageFinished: (msg) ->
     @messagesOut.mark()
@@ -188,9 +200,11 @@ class Stats
 
   processingError: (msg) ->
     @processingErrors.mark()
+    @postEvent {type: 'processingError', message: msg}
 
   yay: (msg) ->
     @processedSuccessfully.mark()
+    @postEvent {type: 'yay', message: msg}
 
   awaitOrderingAdded: (msg) ->
     @awaitOrderingIn.mark()
@@ -207,6 +221,8 @@ class Stats
 
     @logger.info "Initiating self destruction sequence..."
 
+    d = Q.defer()
+
     subscription = Rx.Observable.interval(500).subscribe =>
       if @messagesInProgress() is 0
         subscription.dispose()
@@ -216,6 +232,13 @@ class Stats
         Q.all _.map(@_stopListeners, (fn) -> fn())
         .then =>
           @logger.info "Graceful exit #{JSON.stringify @toJSON()}"
+          d.resolve @toJSON(), @toJSON(true)
+        .fail (error) =>
+          @logger.error "Unable to perform graceful exit because of the error!", error
+          d.reject error
+        .done()
+
+    d.promise
 
   startServer: (port) ->
     return null

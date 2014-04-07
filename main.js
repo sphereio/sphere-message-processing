@@ -3,6 +3,7 @@ stats = require('./lib/stats')
 message_processor = require('./lib/message_processor')
 message_persistence = require('./lib/message_persistence')
 message_processing = require('./lib/message_processing')
+sphere_test_kit = require('./lib/sphere_test_kit')
 task_queue = require('./lib/task_queue')
 pagger = require('./lib/pagger')
 repeater = require('./lib/repeater')
@@ -22,5 +23,6 @@ exports.Pagger = pagger.Pagger
 exports.Repeater = repeater.Repeater
 exports.LoggerFactory = logger.LoggerFactory
 exports.Logger = logger.Logger
+exports.SphereTestKit = sphere_test_kit.SphereTestKit
 
 exports.util = util

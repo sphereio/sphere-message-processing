@@ -140,8 +140,7 @@ class MessageProcessor
     .flatMap (msg) =>
       [locked, errors, toRecycle] = msg.persistence.lockMessage msg
 
-      errors
-      .subscribe @_ignoreCompleted(@unrecoverableErrors)
+      errors.subscribe @_ignoreCompleted(@unrecoverableErrors)
       toRecycle.subscribe @_ignoreCompleted(@recycleBin)
 
       locked
