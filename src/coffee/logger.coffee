@@ -58,7 +58,7 @@ class VerySimpleConsoleLogger
 
   debug: (message) ->
     if @_acceptLevel('debug')
-      console.debug @_formatMessage('debug', message)
+      console.info @_formatMessage('debug', message)
 
   info: (message) ->
     if @_acceptLevel('info')

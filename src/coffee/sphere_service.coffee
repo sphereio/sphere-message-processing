@@ -39,8 +39,12 @@ class SphereService
     @stats.addCustomStat @statsPrefix + @projectKey, "referenceCacheSize", =>
       _.size @referenceCache
 
-    @stats.cacheClearCommands.subscribe =>
+    subscription = @stats.cacheClearCommands.subscribe =>
       @referenceCache.reset()
+
+    @stats.addStopListener =>
+      @logger.debug "Stopping cache cleaner for #{@projectKey}"
+      subscription.dispose()
 
   _init: () ->
     @_renewAccessToken()
@@ -49,7 +53,7 @@ class SphereService
       this
 
   _startAccessTokenRenewalTask: () ->
-    Rx.Observable.interval(10 * 60 * 1000)
+    subscription = Rx.Observable.interval(10 * 60 * 1000)
     .subscribe =>
       if @_getRemainingAccessTokenTimeMs() < @accessTokenExpirationBeforeRenewalMs
         @_renewAccessToken()
@@ -58,6 +62,10 @@ class SphereService
         .fail (error) =>
           @logger.error "Failed to renew access token!!", error
         .done()
+
+    @stats.addStopListener =>
+      @logger.info "Stopping tocken renewal for #{@projectKey}"
+      subscription.dispose()
 
   _getRemainingAccessTokenTimeMs: () ->
     (@_accessToken.gotAt.getTime() + (@_accessToken.expires_in * 1000)) - Date.now()

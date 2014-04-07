@@ -24,18 +24,26 @@ class MessagePersistenceService
       _.size @sequenceNumberCache
     @stats.addCustomStat @getSourceInfo().prefix, "processedMessagesCacheSize", =>
       _.size @processedMessagesCache
-    @stats.cacheClearCommands.subscribe =>
+
+    cacheSubscription = @stats.cacheClearCommands.subscribe =>
       @sequenceNumberCache.reset()
       @processedMessagesCache.reset()
-    @stats.panicModeEvents.subscribe (panic) =>
+
+    panicSubscription = @stats.panicModeEvents.subscribe (panic) =>
       if panic?
         @panicMode = panic
 
 
+    @stats.addStopListener =>
+      cacheSubscription.dispose()
+      panicSubscription.dispose()
+
     @_startAwaitingMessagesChecker()
 
   _startAwaitingMessagesChecker: () ->
-    Rx.Observable.interval @checkInterval
+    @logger.info "Starting awaiting message checker"
+
+    subscription = Rx.Observable.interval @checkInterval
     .subscribe =>
       [outdated, stillAwaiting] = _.partition @awaitingMessages, (a) =>
         @panicMode or (Date.now() - a.added > @awaitTimeout)
@@ -65,6 +73,10 @@ class MessagePersistenceService
           out.errors.onCompleted()
           out.sink.onCompleted()
         .done()
+
+    @stats.addStopListener =>
+      @logger.info "Stopping awaiting message checker"
+      subscription.dispose()
 
   _checkAwaiting: (justProcessedMsg) ->
     [toSink, stillAwaiting] = _.partition @awaitingMessages, (a) =>

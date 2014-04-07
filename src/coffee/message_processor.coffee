@@ -20,9 +20,17 @@ class MessageProcessor
     .filter (heartbeat) =>
       not @stats.applyBackpressureAtHeartbeat(heartbeat)
 
-    messageSources = _.map @messageSources, (source) ->
+    messageSources = _.map @messageSources, (source) =>
       [sourceObserver, sourceObservable] = source.getMessageSource()
-      heartbeat.subscribe sourceObserver
+      subscription = heartbeat.subscribe sourceObserver
+
+      @logger.info "Wiring message fetch for #{source.getSourceInfo().prefix}"
+
+      @stats.addStopListener =>
+        @logger.info "Stopping hartbeat for #{source.getSourceInfo().prefix}"
+        subscription.dispose()
+        sourceObserver.onCompleted()
+
       sourceObservable
 
     all = Rx.Observable.merge messageSources

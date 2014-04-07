@@ -8,7 +8,7 @@ measured = require 'measured'
 class Meter
   constructor: (name, units) ->
     @meters = _.map units, (unit) ->
-      {unit: unit, name: "#{name}Per#{unit.name}", meter: new measured.Meter({rateUnit: unit.rateUnit})}
+      {unit: unit, name: "#{name}Per#{unit.name}", meter: {mark: (() -> "foo"), unref: (() -> "goo"), toJSON: (() -> {count: 0})}}
 
   mark: () ->
     _.each @meters, (meter) ->
@@ -16,6 +16,9 @@ class Meter
 
   count: () ->
     @meters[0].meter.toJSON().count
+
+  unref: () ->
+    _.each @meters, (meter) -> meter.meter.unref()
 
   toJSON: () ->
     _.reduce @meters, ((acc, m) -> acc[m.name] = m.meter.toJSON(); acc), {}
@@ -55,6 +58,33 @@ class Stats
 
     @_panicModeObserver = new Rx.BehaviorSubject()
     @panicModeEvents = @_panicModeObserver
+    @_stopListeners = []
+
+    @addStopListener =>
+      @_cacheClearCommandsObserver.onCompleted()
+      @_panicModeObserver.onCompleted()
+      @_unrefMeters()
+
+  _unrefMeters: () ->
+    # workaround until PR is merged: https://github.com/felixge/node-measured/pull/12
+    allTimerMeters = _.map [@messageProcessingTimer].concat(_.map(@customTimers, (t) -> t.timer)), (t) -> t._meter
+    allMeters = _.map(@customMeters, (m) -> m.meter).concat(allTimerMeters).concat([
+      @messagesIn
+      @messagesOut
+      @tasksStarted
+      @tasksFinished
+      @awaitOrderingIn
+      @awaitOrderingOut
+      @lockedMessages
+      @unlockedMessages
+      @inProcessing
+      @lockFailedMessages
+      @processedSuccessfully
+      @processingErrors
+      @messageFetchErrors
+    ])
+
+    _.each allMeters, (meter) -> meter.unref()
 
   toJSON: (countOnly = false) ->
     json =
@@ -94,6 +124,9 @@ class Stats
         json["#{timerDef.prefix}.#{timerDef.name}"] = timerDef.timer.toJSON().histogram
 
     json
+
+  addStopListener: (fn) ->
+    @_stopListeners.push fn
 
   addCustomStat: (prefix, name, statJsonFn) ->
     @customStats.push {prefix: prefix, name: name, statJsonFn: statJsonFn}
@@ -168,13 +201,24 @@ class Stats
   startMessageProcessingTimer: () ->
     @messageProcessingTimer.start()
 
-  _initiateSelfDestructionSequence: ->
-    Rx.Observable.interval(500).subscribe =>
+  initiateSelfDestructionSequence: ->
+    @panicMode = true
+    @_panicModeObserver.onNext true
+
+    @logger.info "Initiating self destruction sequence..."
+
+    subscription = Rx.Observable.interval(500).subscribe =>
       if @messagesInProgress() is 0
-        @logger.info "Graceful exit #{JSON.stringify @toJSON()}",
-        process.exit 0
+        subscription.dispose()
+
+        @logger.info "All messages are evacuated!"
+
+        Q.all _.map(@_stopListeners, (fn) -> fn())
+        .then =>
+          @logger.info "Graceful exit #{JSON.stringify @toJSON()}"
 
   startServer: (port) ->
+    return null
     statsApp = express()
 
     statsApp.get '/', (req, res) =>
@@ -192,9 +236,7 @@ class Stats
       res.json
         message: 'Self destruction sequence initiated!'
 
-      @panicMode = true
-      @_panicModeObserver.onNext true
-      @_initiateSelfDestructionSequence()
+      @initiateSelfDestructionSequence()
 
     statsApp.get '/pause', (req, res) =>
       if @paused
@@ -214,14 +256,28 @@ class Stats
         res.json
           message: "Done."
 
-    statsApp.listen port, =>
+    server = statsApp.listen port, =>
       @logger.info "Statistics is on port #{port}"
 
+    @addStopListener =>
+      @logger.info "Stopping stats server"
+
+      d = Q.defer()
+
+      server.close ->
+        d.resolve()
+
+      d.promise
+
   startPrinter: (countOnly = false) ->
-    Rx.Observable.interval(3000).subscribe =>
+    subscription  = Rx.Observable.interval(3000).subscribe =>
       @logger.info "+---------------- STATS ----------------+"
       @logger.info JSON.stringify(@toJSON(countOnly))
       @logger.info "+----------------- END -----------------+"
+
+    @addStopListener =>
+      @logger.info "Stopping stats printer"
+      subscription.dispose()
 
 exports.Meter = Meter
 exports.Stats = Stats
