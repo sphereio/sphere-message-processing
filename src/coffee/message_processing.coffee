@@ -37,7 +37,7 @@ class MessageProcessing
         processorName: @processorName
         logger: @rootLogger
         connector:
-          user_agent: @processorName
+          user_agent: "#{@processorName}-#{project.project_key}"
           config: project
 
     Q.all sphereServicesPs
