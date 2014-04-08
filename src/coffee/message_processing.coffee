@@ -20,12 +20,10 @@ class MessageProcessing
     @sourceProjects = util.parseProjectsCredentials @credentialsConfig, @argv.sourceProjects
 
     sphereServicesPs = _.map @sourceProjects, (project) =>
-      project.user_agent = @processorName
-
       messageCriteria =
         if @messageType?
-          ids = if ids? then " and id in (#{_.map(ids, (id) -> '"' + id + '"').join(', ')})" else ''
-          "resource(typeId=\"#{@messageType}\"#{ids})"
+          idsQuery = if _.isArray(ids) then " and id in (#{_.map(ids, (id) -> '"' + id + '"').join(', ')})" else ''
+          "resource(typeId=\"#{@messageType}\"#{idsQuery})"
         else
           @messageCriteria
 
@@ -39,6 +37,7 @@ class MessageProcessing
         processorName: @processorName
         logger: @rootLogger
         connector:
+          user_agent: @processorName
           config: project
 
     Q.all sphereServicesPs
