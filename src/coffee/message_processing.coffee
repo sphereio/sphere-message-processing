@@ -24,7 +24,7 @@ class MessageProcessing
 
       messageCriteria =
         if @messageType?
-          ids = if ids? then " and id in (#{_.map(ids, (id) -> '"' + id + '"').join(', ')})"
+          ids = if ids? then " and id in (#{_.map(ids, (id) -> '"' + id + '"').join(', ')})" else ''
           "resource(typeId=\"#{@messageType}\"#{ids})"
         else
           @messageCriteria

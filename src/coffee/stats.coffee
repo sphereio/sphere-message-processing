@@ -241,7 +241,6 @@ class Stats
     d.promise
 
   startServer: (port) ->
-    return null
     statsApp = express()
 
     statsApp.get '/', (req, res) =>
