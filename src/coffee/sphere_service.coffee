@@ -239,23 +239,7 @@ class SphereService
     new Pagger
       pageSize: @customObjectsPageSize
       onNextPage: (offset, limit) =>
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
-        @_get @_pathWhere("/custom-objects", "container=\"#{@getMessagesStateContainer()}\"#{where}", ["container asc"], null, limit, offset)
+        @_get @_pathWhere("/custom-objects", "container=\"#{@getMessagesStateContainer()}\"#{where}", ["lastModifiedAt asc"], null, limit, offset)
     .page()
 
   getLastProcessedSequenceNumber: (resource) ->
