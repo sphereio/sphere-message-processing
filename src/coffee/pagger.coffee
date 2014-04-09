@@ -18,8 +18,11 @@ class Pagger
     .then ->
       subj.onCompleted()
     .fail (error) =>
-      @errorFn error
-      subj.onCompleted()
+      if @errorFn?
+        @errorFn error
+        subj.onCompleted()
+      else
+        subj.onError error
     .finally =>
       if @finishFn
         @finishFn()

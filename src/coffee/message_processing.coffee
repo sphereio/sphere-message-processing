@@ -42,6 +42,8 @@ class MessageProcessing
 
     Q.all sphereServicesPs
     .then (sphereServices) =>
+      @stats.setMessageSources sphereServices
+
       new MessageProcessor @stats,
         messageSources: _.map(sphereServices, (sphere) => new MessagePersistenceService(@stats, sphere, {awaitTimeout: @argv.awaitTimeout, logger: @rootLogger}))
         processors: @processors
@@ -186,7 +188,7 @@ class MessageProcessingBuilder
     .default('fetchHours', 24)
     .default('messagesPageSize', 100)
     .default('maxParallelSphereConnections', 100)
-    .default('logLevel', 'debug')
+    .default('logLevel', 'info')
     .default('sphereHost', 'api.sphere.io')
 
     if @optimistExtrasFn?

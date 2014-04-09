@@ -1,6 +1,7 @@
 Rx = require 'rx'
 Q = require 'q'
 {_} = require 'underscore'
+_s = require 'underscore.string'
 {Rest} = require 'sphere-node-connect'
 {TaskQueue} = require '../lib/task_queue'
 {Pagger} = require '../lib/pagger'
@@ -22,6 +23,7 @@ class SphereService
     @fetchHours = options.fetchHours
     @statsPrefix = options.statsPrefix or ""
     @messagesPageSize = options.messagesPageSize
+    @customObjectsPageSize = @messagesPageSize
     @requestQueue = options.requestQueue or (new TaskQueue @stats, {maxParallelTasks: 100})
     @additionalMessageCriteria = options.additionalMessageCriteria
     @additionalMessageExpand = options.additionalMessageExpand or []
@@ -112,8 +114,12 @@ class SphereService
 
       @requestMeter.mark()
       stopwatch = @requestTimer.start()
+
+      @logger.debug "[GET] #{path}"
+
       @_client.GET path, (error, response, body) ->
         stopwatch.end()
+
         if error
           d.reject error
         else if response.statusCode is 200
@@ -129,6 +135,9 @@ class SphereService
 
       @requestMeter.mark()
       stopwatch = @requestTimer.start()
+
+      @logger.debug "[POST] #{path}"
+
       @_client.POST path, json, (error, response, body) ->
         stopwatch.end()
         if error
@@ -146,6 +155,9 @@ class SphereService
 
       @requestMeter.mark()
       stopwatch = @requestTimer.start()
+
+      @logger.debug "[DELETE] #{path}"
+
       @_client.DELETE path, (error, response, body) ->
         stopwatch.end()
         if error
@@ -196,6 +208,56 @@ class SphereService
           @stats.applyBackpressureAtNextMessagePage offset, limit, total
       .page()
 
+  getAllMessageProcessingLocks: (lastHours) ->
+    @getAllMessageProcessingState(lastHours).filter (customObj) ->
+      customObj.value.state is 'lockedForProcessing'
+
+  getAllMessageProcessingErrors: (lastHours) ->
+    @getAllMessageProcessingState(lastHours).filter (customObj) ->
+      customObj.value.state is 'error'
+
+  getMessageStateById: (id) ->
+    @_get "/custom-objects/#{@getMessagesStateContainer()}/#{id}"
+
+  saveMessageState: (newSate) ->
+    @_post "/custom-objects", newSate
+
+  deleteMessageState: (id) ->
+    @_delete "/custom-objects/#{@getMessagesStateContainer()}/#{id}"
+
+  getMessagesStateContainer: () ->
+    "#{@processorName}.messages"
+
+  getAllMessageProcessingState: (lastHours) ->
+    where =
+      if lastHours?
+        fromDate = util.addDateTime(new Date(), -1 * (if _.isString(lastHours) then parseInt(lastHours) else lastHours), 0, 0)
+        " and lastModifiedAt > \"#{util.formatDate fromDate}\""
+      else
+        ''
+
+    new Pagger
+      pageSize: @customObjectsPageSize
+      onNextPage: (offset, limit) =>
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        # FIXME: here is the correct sort criteria: ["lastModifiedAt asc"]. In code is just a workeround
+        @_get @_pathWhere("/custom-objects", "container=\"#{@getMessagesStateContainer()}\"#{where}", ["container asc"], null, limit, offset)
+    .page()
+
   getLastProcessedSequenceNumber: (resource) ->
     @_get "/custom-objects/#{@processorName}.lastSequenceNumber/#{resource.typeId}-#{resource.id}"
     .then (resp) ->
@@ -230,7 +292,7 @@ class SphereService
 
   _tryTakeLock: (id) ->
     json =
-      container: "#{@processorName}.messages"
+      container: @getMessagesStateContainer()
       key: "#{id}"
       version: 0
       value:
@@ -242,14 +304,14 @@ class SphereService
     .fail (error) =>
       if error instanceof ErrorStatusCode and (error.code is 409 or error.code is 500) # 500 because of the missing improvement
         # was just created by comeone
-        @_get "/custom-objects/#{@processorName}.messages/#{id}"
+        @_get "/custom-objects/#{@getMessagesStateContainer()}/#{id}"
         .then (lock) ->
           {type: "existing", payload: lock}
       else
         throw error
 
   _findMessageProcessingRecordOrLock: (id) ->
-    @_get "/custom-objects/#{@processorName}.messages/#{id}"
+    @_get "/custom-objects/#{@getMessagesStateContainer()}/#{id}"
     .then (lock) ->
       {type: "existing", payload: lock}
     .fail (error) =>
@@ -262,13 +324,14 @@ class SphereService
     @_findMessageProcessingRecordOrLock msg.id
 
   unlockMessage: (msg, lock) ->
-    @_delete "/custom-objects/#{@processorName}.messages/#{msg.id}?version=#{lock.version}"
+    @_delete "/custom-objects/#{@getMessagesStateContainer()}/#{msg.id}?version=#{lock.version}"
 
   _pathWhere: (path, where, sort = [], expand = [], limit = 100, offset = 0) ->
     sorting = if not _.isEmpty(sort) then "&" + _.map(sort, (s) -> "sort=" + encodeURIComponent(s)).join("&") else ""
     expanding = if not _.isEmpty(expand) then "&" + _.map(expand, (e) -> "expand=" + encodeURIComponent(e)).join("&") else ""
+    whereQuery = if not _s.isBlank(where) then "where=#{encodeURIComponent(where)}" else ""
 
-    "#{path}?where=#{encodeURIComponent(where)}#{sorting}#{expanding}&limit=#{limit}&offset=#{offset}"
+    "#{path}?#{whereQuery}#{sorting}#{expanding}&limit=#{limit}&offset=#{offset}"
 
   ensureChannels: (defs) ->
     promises = _.map defs, (def) =>

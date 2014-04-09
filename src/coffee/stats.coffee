@@ -1,9 +1,12 @@
 Rx = require 'rx'
 Q = require 'q'
 {_} = require 'underscore'
+_s = require 'underscore.string'
 express = require 'express'
 measured = require 'measured'
 {LoggerFactory} = require '../lib/logger'
+util = require '../lib/util'
+JSONStream = require 'JSONStream'
 
 class Meter
   constructor: (name, units) ->
@@ -72,6 +75,9 @@ class Stats
 
   events: () ->
     @_eventSubject
+
+  setMessageSources: (sources) ->
+    @_messageSources = sources
 
   postEvent: (event) ->
     @_eventSubject.onNext(event)
@@ -243,6 +249,9 @@ class Stats
   startServer: (port) ->
     statsApp = express()
 
+    statsApp.use express.cookieParser()
+    statsApp.use express.session({secret: '1234567890QWERTY'})
+
     statsApp.get '/', (req, res) =>
       res.json @toJSON()
 
@@ -277,6 +286,122 @@ class Stats
         @paused = false
         res.json
           message: "Done."
+
+    statsApp.get '/m/:type', (req, res) =>
+      try
+        thresholdHours = if req.query.threshold? then parseInt(req.query.threshold) else 0
+
+        total = 0
+        olderThanThreshold = 0
+
+        sources = _.map @_messageSources, (sphere) ->
+          source =
+            switch req.params.type
+              when 'errors' then sphere.getAllMessageProcessingErrors(req.query.hours)
+              when 'locks' then sphere.getAllMessageProcessingLocks(req.query.hours)
+              else throw new Error("Unsupported type: #{req.params.type}")
+
+          source.do (error) ->
+            error.type = req.params.type
+            error.container = sphere.getMessagesStateContainer()
+            error.projectKey = sphere.getSourceInfo().prefix
+
+            total = total + 1
+
+            lastModifiedAtMs = util.parseDate(error.lastModifiedAt).getTime()
+            thresholdMs = util.addDateHours(new Date(), -1 * thresholdHours).getTime()
+
+            if lastModifiedAtMs < thresholdMs
+              olderThanThreshold = olderThanThreshold + 1
+
+        res.header("Content-Type", "application/json; charset=utf-8")
+
+        writer = JSONStream.stringify()
+        writer.pipe(res)
+
+        nextFn = (msg) ->
+          writer.write msg
+
+        errorFn = (error) ->
+          res.end "Error: #{error.message}"
+
+        completeFn = ->
+          writer.end {type: 'count', total: total, totalOlderThanThreshold: olderThanThreshold, totalNewerThanThreshold: total - olderThanThreshold}
+
+        Rx.Observable.merge(sources).subscribe Rx.Observer.create(nextFn, errorFn, completeFn)
+      catch e
+        console.error e
+        res.end "Error: #{e.message}"
+
+    findSourceByProject = (projectKey) =>
+      _.find @_messageSources, (s) ->s.getSourceInfo().prefix is projectKey
+
+    statsApp.patch '/m/:type/:project/:id', (req, res) =>
+      if not (req.params.type is 'errors' or req.params.type is 'locks')
+        res.json 404, {message: "Unsupported type: " + req.params.type}
+      else if req.query.yes_i_understand_the_consequences_and_want_to_do_it_now? and req.query.yes_i_understand_the_consequences_and_want_to_do_it_now is req.session.code and not _s.isBlank(req.query.my_name)
+        delete req.session.code
+        source = findSourceByProject(req.params.project)
+
+        if not source?
+          res.json 404, {message: "Can't find project #{req.params.project}"}
+        else
+          source.getMessageStateById(req.params.id)
+          .then (result) ->
+            result.value.state = "processed"
+            result.value.WAS_FORCED_BY = req.query.my_name
+
+            source.saveMessageState result
+            .then ->
+              res.json {message: "Done! Thank you very much for resolving the issue!"}
+          .fail (error) ->
+            res.json 500, {message: "Error! " + error.message}
+          .done()
+      else
+        source = findSourceByProject(req.params.project)
+
+        if not source?
+          res.json 404, {message: "Can't find project #{req.params.project}"}
+        else
+          source.getMessageStateById(req.params.id)
+          .then (result) ->
+            req.session.code = "#{_.random(0, 1000)}"
+            res.json 400, {message: "You are about to mark a message with ID '#{req.params.id}' as PROCESSED!!! Please be very carefull and think very carefully one more time about it! I you still desperate about it, then please add query parameter yes_i_understand_the_consequences_and_want_to_do_it_now with value #{req.session.code} and provide your name with my_name!", state: result}
+          .fail (error) ->
+            res.json 500, {message: "Error! " + error.message}
+          .done()
+
+    statsApp.delete '/m/:type/:project/:id', (req, res) =>
+      if not (req.params.type is 'errors' or req.params.type is 'locks')
+        res.json 404, {message: "Unsupported type: " + req.params.type}
+      else if req.query.yes_i_understand_the_consequences_and_want_to_do_it_now? and req.query.yes_i_understand_the_consequences_and_want_to_do_it_now is req.session.code and not _s.isBlank(req.query.my_name)
+        delete req.session.code
+        source = findSourceByProject(req.params.project)
+
+        if not source?
+          res.json 404, {message: "Can't find project #{req.params.project}"}
+        else
+          source.getMessageStateById(req.params.id)
+          .then ->
+            source.deleteMessageState req.params.id
+            .then ->
+              res.json {message: "Done! Thank you very much for resolving the issue!"}
+          .fail (error) ->
+            res.json 500, {message: "Error! " + error.message}
+          .done()
+      else
+        source = findSourceByProject(req.params.project)
+
+        if not source?
+          res.json 404, {message: "Can't find project #{req.params.project}"}
+        else
+          source.getMessageStateById(req.params.id)
+          .then (result) ->
+            req.session.code = "#{_.random(0, 1000)}"
+            res.json 400, {message: "You are about to !!!!!DETETE!!!! message with ID '#{req.params.id}'!!! Please be very very very carefull and think very carefully one more time about it! I you still desperate about it, then please add query parameter yes_i_understand_the_consequences_and_want_to_do_it_now with value #{req.session.code} and provide your name with my_name!", state: result}
+          .fail (error) ->
+            res.json 500, {message: "Error! " + error.message}
+          .done()
 
     server = statsApp.listen port, =>
       @logger.info "Statistics is on port #{port}"
