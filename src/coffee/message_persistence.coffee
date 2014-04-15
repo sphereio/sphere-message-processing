@@ -29,14 +29,18 @@ class MessagePersistenceService
       @sequenceNumberCache.reset()
       @processedMessagesCache.reset()
 
+    snSubscription = @stats.sequenceNumberChange.subscribe (msg) =>
+      @sequenceNumberCache.set @_snCacheKey(msg.resource), msg.sequenceNumber
+      @_checkAwaiting msg.resource, msg.sequenceNumber
+
     panicSubscription = @stats.panicModeEvents.subscribe (panic) =>
       if panic?
         @panicMode = panic
 
-
     @stats.addStopListener ->
       cacheSubscription.dispose()
       panicSubscription.dispose()
+      snSubscription.dispose()
 
     @_startAwaitingMessagesChecker()
 
@@ -78,15 +82,15 @@ class MessagePersistenceService
       @logger.info "Stopping awaiting message checker"
       subscription.dispose()
 
-  _checkAwaiting: (justProcessedMsg) ->
+  _checkAwaiting: (resourceRef, sequenceNumber) ->
     [toSink, stillAwaiting] = _.partition @awaitingMessages, (a) =>
-      @_snCacheKey(a.message.payload.resource) is @_snCacheKey(justProcessedMsg.payload.resource) and a.message.payload.sequenceNumber is (justProcessedMsg.payload.sequenceNumber + 1)
+      @_snCacheKey(a.message.payload.resource) is @_snCacheKey(resourceRef) and a.message.payload.sequenceNumber is (sequenceNumber + 1)
 
     @awaitingMessages = stillAwaiting
 
     _.each toSink, (s) =>
       @stats.awaitOrderingRemoved s.message
-      @_doSinkMessage {sequenceNumber: justProcessedMsg.payload.sequenceNumber, cached: true}, s
+      @_doSinkMessage {sequenceNumber: sequenceNumber, cached: true}, s
 
   getSourceInfo: () ->
     @sphere.getSourceInfo()
@@ -99,6 +103,11 @@ class MessagePersistenceService
       {payload: msg, persistence: this}
 
     [observer, newObservable]
+
+  getMessagesForResource: (resourceId) ->
+    @sphere.getMessagesForResource(resourceId)
+    .map (msg) =>
+      {payload: msg, persistence: this}
 
   checkAvaialbleForProcessingAndLockLocally: (msg) ->
     @isProcessed msg
@@ -182,7 +191,7 @@ class MessagePersistenceService
 
       if not alreadyInCache? or alreadyInCache < msg.payload.sequenceNumber
         @sequenceNumberCache.set @_snCacheKey(msg.payload.resource), msg.payload.sequenceNumber
-        @_checkAwaiting msg
+        @_checkAwaiting msg.payload.resource, msg.payload.sequenceNumber
 
       msg
 

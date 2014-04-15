@@ -33,7 +33,18 @@ class MessageProcessor
 
       sourceObservable
 
-    all = Rx.Observable.merge messageSources
+    reprocessSource = @stats.resourceReprocess
+    .flatMap (cmd) =>
+      prefix = cmd.sphere.getSourceInfo().prefix
+      source = _.find @messageSources, (ms) -> ms.getSourceInfo().prefix is prefix
+
+      if not source?
+        @logger.error "Source not found!!!! Shoud not happen!"
+        Rx.Observable.fromArray []
+      else
+        source.getMessagesForResource cmd.resourceId
+
+    all = Rx.Observable.merge messageSources.concat([reprocessSource])
     .map (msg) =>
       @stats.incommingMessage msg
 

@@ -182,6 +182,16 @@ class SphereService
 
     [subject, observable]
 
+  getMessagesForResource: (resourceId) ->
+    new Pagger
+      pageSize: @messagesPageSize
+      onNextPage: (offset, limit) =>
+        @_get @_pathWhere("/messages", "resource(id=\"#{resourceId}\")", ["sequenceNumber asc"], ["resource"], limit, offset)
+      onError: (error) =>
+        @logger.error "Error during message fetch for resource #{resourceId}!", error
+        @stats.reportMessageFetchError()
+    .page()
+
   getRecentMessages: (fromDate, offset, limit) ->
     additional = if @additionalMessageCriteria? then " and #{@additionalMessageCriteria}" else ""
 
@@ -204,7 +214,7 @@ class SphereService
           @stats.reportMessageFetchError()
         onFinish: =>
           @_messageFetchInProgress = false
-        applyBackpressureOnNextPage: (offset, limit, total)=>
+        applyBackpressureOnNextPage: (offset, limit, total) =>
           @stats.applyBackpressureAtNextMessagePage offset, limit, total
       .page()
 
@@ -218,6 +228,16 @@ class SphereService
 
   getMessageStateById: (id) ->
     @_get "/custom-objects/#{@getMessagesStateContainer()}/#{id}"
+
+  getMessageById: (id, expandResource) ->
+    @_get "/messages/#{id}#{if expandResource then '?expand=resource' else ''}"
+
+  getMessagesByResource: (resourceId, expandResource) ->
+    new Pagger
+      pageSize: @messagesPageSize
+      onNextPage: (offset, limit) =>
+        @_get @_pathWhere("/messages", "resource(id=\"#{resourceId}\")", ["sequenceNumber asc"], (if expandResource then ["resource"] else []), limit, offset)
+    .page()
 
   saveMessageState: (newSate) ->
     @_post "/custom-objects", newSate
@@ -252,13 +272,16 @@ class SphereService
       else
         throw error
 
-  reportSuccessfullProcessing: (msg, lock, result) ->
+  updateLastProcessedSequenceNumber: (resource, sequenceNumber) ->
     lastSnJson =
       container: "#{@processorName}.lastSequenceNumber"
-      key: "#{msg.resource.typeId}-#{msg.resource.id}"
-      value: msg.sequenceNumber
+      key: "#{resource.typeId}-#{resource.id}"
+      value: sequenceNumber
 
     @_post "/custom-objects", lastSnJson
+
+  reportSuccessfullProcessing: (msg, lock, result) ->
+    @updateLastProcessedSequenceNumber msg.resource, msg.sequenceNumber
     .then =>
       lock.value.state = "processed"
       lock.value.result = result if result?

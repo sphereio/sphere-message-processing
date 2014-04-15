@@ -6,6 +6,7 @@ express = require 'express'
 measured = require 'measured'
 {LoggerFactory} = require '../lib/logger'
 util = require '../lib/util'
+{ErrorStatusCode} = require '../lib/sphere_service'
 JSONStream = require 'JSONStream'
 
 class Meter
@@ -58,9 +59,14 @@ class Stats
 
     @_eventSubject = options.eventSubject or new Rx.Subject()
 
-    @cacheClearCommands = @_cacheClearCommandsObserver
     @_cacheClearCommandsObserver = new Rx.Subject()
     @cacheClearCommands = @_cacheClearCommandsObserver
+
+    @_sequenceNumberChangeObserver = new Rx.Subject()
+    @sequenceNumberChange = @_sequenceNumberChangeObserver
+
+    @_resourceReprocessObserver = new Rx.Subject()
+    @resourceReprocess = @_resourceReprocessObserver
 
     @_panicModeObserver = new Rx.BehaviorSubject()
     @panicModeEvents = @_panicModeObserver
@@ -69,6 +75,8 @@ class Stats
 
     @addStopListener =>
       @_cacheClearCommandsObserver.onCompleted()
+      @_sequenceNumberChangeObserver.onCompleted()
+      @_resourceReprocessObserver.onCompleted()
       @_panicModeObserver.onCompleted()
       @_eventSubject.onCompleted()
       @_unrefMeters()
@@ -287,9 +295,148 @@ class Stats
         res.json
           message: "Done."
 
-    statsApp.get '/m/:type', (req, res) =>
+    enhanceMessageStateWithMessage = (sphere, messageState, expandResource) ->
+      subj = new Rx.ReplaySubject()
+
+      sphere.getMessageById(messageState.key, expandResource)
+      .then (message) ->
+        messageState.message = message
+
+        subj.onNext messageState
+        subj.onCompleted()
+      .fail (error) ->
+        subj.onError error
+      .done()
+
+      subj
+
+    getMessageState = (sphere, message, promise) ->
+      subj = new Rx.ReplaySubject()
+
+      sphere.getMessageStateById(message.id)
+      .then (state) ->
+        (promise or Q())
+        .then ->
+          subj.onNext state
+          subj.onCompleted()
+      .fail (error) ->
+        if error instanceof ErrorStatusCode and (error.code is 404)
+          subj.onNext null
+          subj.onCompleted()
+        else
+          subj.onError error
+      .done()
+
+      subj
+
+    findSourceByProject = (projectKey) =>
+      _.find @_messageSources, (s) ->s.getSourceInfo().prefix is projectKey
+
+    statsApp.patch '/r/:project/:id', (req, res) =>
+      source = findSourceByProject(req.params.project)
+      @_resourceReprocessObserver.onNext {sphere: source, resourceId: req.params.id}
+      res.json {message: "Resource would be processed once again!"}
+
+    statsApp.get '/r/:project/:id', (req, res) =>
+      resourceId = req.params.id
+      expandMessage = if req.query.expandMessage? then req.query.expandMessage == 'true' else true
+      expandResource = if req.query.expandResource? then req.query.expandResource == 'true' else false
+
       try
-        thresholdHours = if req.query.threshold? then parseInt(req.query.threshold) else 0
+        total = 0
+        errors = 0
+        processed = 0
+        locked = 0
+        none = 0
+        resource = null
+        container = null
+        projectKey = null
+
+        sphere = findSourceByProject req.params.project
+
+        if not sphere
+          throw new Error("Unknown project: #{req.params.project}")
+
+        lastPromise = null
+
+        source = sphere.getMessagesByResource resourceId, true
+        .flatMap (message) ->
+          if not resource?
+            resource = _.clone message.resource
+
+          delete message.resource.obj
+
+          container = sphere.getMessagesStateContainer()
+          projectKey = sphere.getSourceInfo().prefix
+
+          total = total + 1
+
+          defer = Q.defer()
+
+          prevPromise = lastPromise
+          lastPromise = defer.promise
+
+          getMessageState sphere, message, prevPromise
+          .map (state) ->
+            if not state?
+              none = none + 1
+            else if state.value.state is 'error'
+              errors = errors + 1
+            else if state.value.state is 'processed'
+              processed = processed + 1
+            else if state.value.state is 'lockedForProcessing'
+              locked = locked + 1
+
+
+            defer.resolve()
+
+            if expandMessage
+              {message: message, state: state}
+            else
+              {state: state}
+
+        res.header("Content-Type", "application/json; charset=utf-8")
+
+        writer = JSONStream.stringify()
+        writer.pipe(res)
+
+        nextFn = (msg) ->
+          writer.write msg
+
+        errorFn = (error) ->
+          res.end "Error: #{error.message}"
+
+        completeFn = ->
+          sphere.getLastProcessedSequenceNumber resource
+          .then (sequenceNumber) ->
+            writer.end
+              type: 'summary',
+              container: container
+              projectKey: projectKey
+              totalMessages: total
+              errors: errors
+              processed: processed
+              locked: locked
+              none: none
+              lastProcessedSequenceNumber: sequenceNumber
+              resource: (if expandResource then resource.obj else "use expandResource=true")
+          .fail (error) ->
+            res.end "Error: #{error.message}"
+          .done()
+
+        source.subscribe Rx.Observer.create(nextFn, errorFn, completeFn)
+      catch e
+        console.error e
+        res.end "Error: #{e.message}"
+
+    statsApp.get '/m/:type', (req, res) =>
+      expandResource = if req.query.expandResource? then req.query.expandResource == 'true' else false
+      expandMessage = if req.query.expandMessage? then req.query.expandMessage == 'true' else true
+      threshold = req.query.threshold
+      hours = req.query.hours
+
+      try
+        thresholdHours = if threshold? then parseInt(threshold) else 0
 
         total = 0
         olderThanThreshold = 0
@@ -297,11 +444,11 @@ class Stats
         sources = _.map @_messageSources, (sphere) ->
           source =
             switch req.params.type
-              when 'errors' then sphere.getAllMessageProcessingErrors(req.query.hours)
-              when 'locks' then sphere.getAllMessageProcessingLocks(req.query.hours)
+              when 'errors' then sphere.getAllMessageProcessingErrors(hours)
+              when 'locks' then sphere.getAllMessageProcessingLocks(hours)
               else throw new Error("Unsupported type: #{req.params.type}")
 
-          source.do (error) ->
+          source.flatMap (error) ->
             error.type = req.params.type
             error.container = sphere.getMessagesStateContainer()
             error.projectKey = sphere.getSourceInfo().prefix
@@ -313,6 +460,12 @@ class Stats
 
             if lastModifiedAtMs < thresholdMs
               olderThanThreshold = olderThanThreshold + 1
+
+            if expandMessage
+              enhanceMessageStateWithMessage sphere, error, expandResource
+            else
+              Rx.Observable.fromArray [error]
+
 
         res.header("Content-Type", "application/json; charset=utf-8")
 
@@ -333,8 +486,7 @@ class Stats
         console.error e
         res.end "Error: #{e.message}"
 
-    findSourceByProject = (projectKey) =>
-      _.find @_messageSources, (s) ->s.getSourceInfo().prefix is projectKey
+    # TODO: extract all these endpoints from stats: it's getting too big
 
     statsApp.patch '/m/:type/:project/:id', (req, res) =>
       if not (req.params.type is 'errors' or req.params.type is 'locks')
@@ -347,13 +499,27 @@ class Stats
           res.json 404, {message: "Can't find project #{req.params.project}"}
         else
           source.getMessageStateById(req.params.id)
-          .then (result) ->
-            result.value.state = "processed"
-            result.value.WAS_FORCED_BY = req.query.my_name
+          .then (state) ->
+            source.getMessageById(req.params.id)
+            .then (msg) ->
+              source.getLastProcessedSequenceNumber(msg.resource)
+              .then (lastSeqNum) ->
+                [state, msg, lastSeqNum]
+          .then ([state, msg, lastSeqNum]) =>
+            if msg.sequenceNumber is (lastSeqNum + 1)
+              state.value.state = "processed"
+              state.value.WAS_FORCED_BY = req.query.my_name
 
-            source.saveMessageState result
-            .then ->
-              res.json {message: "Done! Thank you very much for resolving the issue!"}
+              source.saveMessageState state
+              .then =>
+                source.updateLastProcessedSequenceNumber msg.resource, msg.sequenceNumber
+                .then =>
+                  @_sequenceNumberChangeObserver.onNext msg
+                  @_resourceReprocessObserver.onNext {sphere: source, resourceId: msg.resource.id}
+            else
+              Q.reject new Error("You can't just mark everything as processed at will! :( Last processed sequence number was #{lastSeqNum} and you are trying to mark as processed #{msg.sequenceNumber}!")
+          .then ->
+            res.json {message: "Done! Thank you very much for resolving the issue!"}
           .fail (error) ->
             res.json 500, {message: "Error! " + error.message}
           .done()
@@ -364,9 +530,13 @@ class Stats
           res.json 404, {message: "Can't find project #{req.params.project}"}
         else
           source.getMessageStateById(req.params.id)
-          .then (result) ->
+          .then (state) ->
+            source.getMessageById(req.params.id)
+            .then (msg) ->
+              [state, msg]
+          .then ([state, msg]) ->
             req.session.code = "#{_.random(0, 1000)}"
-            res.json 400, {message: "You are about to mark a message with ID '#{req.params.id}' as PROCESSED!!! Please be very carefull and think very carefully one more time about it! I you still desperate about it, then please add query parameter yes_i_understand_the_consequences_and_want_to_do_it_now with value #{req.session.code} and provide your name with my_name!", state: result}
+            res.json 400, {message: "You are about to mark a message with ID '#{req.params.id}' as PROCESSED!!! Please be very carefull and think very carefully one more time about it! I you still desperate about it, then please add query parameter yes_i_understand_the_consequences_and_want_to_do_it_now with value #{req.session.code} and provide your name with my_name!", state: state, msg: msg}
           .fail (error) ->
             res.json 500, {message: "Error! " + error.message}
           .done()
@@ -383,9 +553,13 @@ class Stats
         else
           source.getMessageStateById(req.params.id)
           .then ->
-            source.deleteMessageState req.params.id
-            .then ->
-              res.json {message: "Done! Thank you very much for resolving the issue!"}
+            source.getMessageById(req.params.id)
+          .then (message) =>
+            source.deleteMessageState message.id
+            .then =>
+              @_resourceReprocessObserver.onNext {sphere: source, resourceId: message.resource.id}
+          .then ->
+            res.json {message: "Done! Thank you very much for resolving the issue!"}
           .fail (error) ->
             res.json 500, {message: "Error! " + error.message}
           .done()
@@ -396,9 +570,13 @@ class Stats
           res.json 404, {message: "Can't find project #{req.params.project}"}
         else
           source.getMessageStateById(req.params.id)
-          .then (result) ->
+          .then (state) ->
+            source.getMessageById(req.params.id)
+            .then (msg) ->
+              [state, msg]
+          .then ([state, msg]) ->
             req.session.code = "#{_.random(0, 1000)}"
-            res.json 400, {message: "You are about to !!!!!DETETE!!!! message with ID '#{req.params.id}'!!! Please be very very very carefull and think very carefully one more time about it! I you still desperate about it, then please add query parameter yes_i_understand_the_consequences_and_want_to_do_it_now with value #{req.session.code} and provide your name with my_name!", state: result}
+            res.json 400, {message: "You are about to DETETE message with ID '#{req.params.id}'!!! Please be very very very carefull and think very carefully one more time about it! I you still desperate about it, then please add query parameter yes_i_understand_the_consequences_and_want_to_do_it_now with value #{req.session.code} and provide your name with my_name!", state: state, msg: msg}
           .fail (error) ->
             res.json 500, {message: "Error! " + error.message}
           .done()
