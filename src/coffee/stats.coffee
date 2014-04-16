@@ -321,8 +321,10 @@ class Stats
           subj.onCompleted()
       .fail (error) ->
         if error instanceof ErrorStatusCode and (error.code is 404)
-          subj.onNext null
-          subj.onCompleted()
+          (promise or Q())
+          .then ->
+            subj.onNext null
+            subj.onCompleted()
         else
           subj.onError error
       .done()
