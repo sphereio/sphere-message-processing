@@ -206,7 +206,7 @@ class MessageProcessingBuilder
 
       argv
 
-    () => new MessageProcessing argvFn, @statsOptions, @processors, @additionalMessageCriteria, @_messageType, @additionalMessageExpand, @defaultProcessorName, runFn
+    () => new MessageProcessing argvFn, @statsOptions, _.clone(@processors), @additionalMessageCriteria, @_messageType, @additionalMessageExpand, @defaultProcessorName, runFn
 
 exports.MessageProcessing = MessageProcessing
 exports.MessageProcessingBuilder = MessageProcessingBuilder

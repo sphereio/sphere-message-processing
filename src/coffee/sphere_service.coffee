@@ -109,6 +109,7 @@ class SphereService
     d.promise
 
   _get: (path) ->
+    orig = new Error("Origibally called GET for #{path}. Here is the original stacktrace:")
     @requestQueue.addTask =>
       d = Q.defer()
 
@@ -125,11 +126,12 @@ class SphereService
         else if response.statusCode is 200
           d.resolve body
         else
-          d.reject new ErrorStatusCode(response.statusCode, body)
+          d.reject new ErrorStatusCode(response.statusCode, body, orig)
 
       d.promise
 
   _post: (path, json) ->
+    orig = new Error("Origibally called POST for #{path} with this JSON: #{JSON.stringify(json, null, 2)}. Here is the original stacktrace:")
     @requestQueue.addTask =>
       d = Q.defer()
 
@@ -145,11 +147,12 @@ class SphereService
         else if response.statusCode is 200 or response.statusCode is 201
           d.resolve body
         else
-          d.reject new ErrorStatusCode(response.statusCode, body)
+          d.reject new ErrorStatusCode(response.statusCode, body, orig)
 
       d.promise
 
   _delete: (path) ->
+    orig = new Error("Origibally called DELETE for #{path}. Here is the original stacktrace:")
     @requestQueue.addTask =>
       d = Q.defer()
 
@@ -165,7 +168,7 @@ class SphereService
         else if response.statusCode is 200
           d.resolve body
         else
-          d.reject new ErrorStatusCode(response.statusCode, body)
+          d.reject new ErrorStatusCode(response.statusCode, body, orig)
 
       d.promise
 
@@ -272,6 +275,21 @@ class SphereService
       else
         throw error
 
+  getCustomObjectForResource: (resource) ->
+    @_get "/custom-objects/#{@processorName}.data/#{resource.typeId}-#{resource.id}"
+    .fail (error) =>
+      if error instanceof ErrorStatusCode and (error.code is 404)
+        {
+          container: "#{@processorName}.data"
+          key: "#{resource.typeId}-#{resource.id}"
+          version: 0
+        }
+      else
+        throw error
+
+  saveCustomObject: (customObject) ->
+    @_post "/custom-objects", customObject
+
   updateLastProcessedSequenceNumber: (resource, sequenceNumber) ->
     lastSnJson =
       container: "#{@processorName}.lastSequenceNumber"
@@ -309,7 +327,7 @@ class SphereService
     .then (lock) ->
       {type: "new", payload: lock}
     .fail (error) =>
-      if error instanceof ErrorStatusCode and (error.code is 409 or error.code is 500) # 500 because of the missing improvement
+      if error instanceof ErrorStatusCode and (error.code is 409 or error.code is 400)
         # was just created by comeone
         @_get "/custom-objects/#{@getMessagesStateContainer()}/#{id}"
         .then (lock) ->
@@ -420,6 +438,13 @@ class SphereService
     json =
       version: order.version
       actions: [{action: 'updateSyncInfo', channel: {typeId: "channel", id: channel.id}, externalId: externalId}]
+
+    @_post "/orders/#{order.id}", json
+
+  setOrderState: (order, state) ->
+    json =
+      version: order.version
+      actions: [{action: 'changeOrderState', orderState: state}]
 
     @_post "/orders/#{order.id}", json
 
@@ -601,8 +626,8 @@ class SphereService
 
 
 class ErrorStatusCode extends Error
-  constructor: (@code, @body) ->
-    @message = "Status code is #{@code}: #{JSON.stringify @body}"
+  constructor: (@code, @body, cause) ->
+    @message = "Status code is #{@code}: #{JSON.stringify @body, null, 2}. #{if cause? then cause.stack + "\n\nReqiest stacktrace:\n" else ''}"
     @name = 'ErrorStatusCode'
     Error.captureStackTrace this, this
 

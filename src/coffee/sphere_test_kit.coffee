@@ -16,6 +16,19 @@ class  SphereTestKit
     {key: "Pickup", transitions: ["Shipped"]}
     {key: "Shipped", transitions: ["Finished"]}
     {key: "Finished", transitions: ["ReadyForShipment"]}
+
+    {key: "canceled"}
+    {key: "returnNotApproved"}
+    {key: "closed"}
+    {key: "picking"}
+    {key: "backorder"}
+    {key: "readyToShip"}
+    {key: "shipped"}
+    {key: "returned"}
+    {key: "returnApproved"}
+    {key: "lost"}
+    {key: "lossApproved"}
+    {key: "lossNotApproved"}
   ]
 
   channelDefs: [
@@ -29,7 +42,7 @@ class  SphereTestKit
   constructor: (@sphere) ->
     @logger = LoggerFactory.getLogger "test-kit.#{@sphere.getSourceInfo().prefix}"
 
-  setupProject: ->
+  setupProject: (onlyOneOrderWith3LineItems = false) ->
     Q.all [
       @configureStates()
       @configureChannels()
@@ -37,25 +50,35 @@ class  SphereTestKit
       @configureTaxCategory()
     ]
     .then =>
-      orders = _.map _.range(1, 6), (idx) =>
-        @createTestOrder idx
+      if not onlyOneOrderWith3LineItems
+        orders = _.map _.range(1, 6), (idx) =>
+          @createTestOrder idx
 
-      Q.all orders
-    .then (orders) =>
-      @orders = _.map orders, (os) ->
-        [m, r] = os
-        {retailerOrder: r, masterOrder: m}
+        Q.all orders
+        .then (orders) =>
+          @orders = _.map orders, (os) ->
+            [m, r] = os
+            {retailerOrder: r, masterOrder: m}
 
-      @logger.info "Orders"
+          @logger.info "Orders"
 
-      _.each @orders, (o, i) =>
-        @logger.info "#{i} Retailer: #{o.retailerOrder.id}, Master: #{o.masterOrder.id}"
+          _.each @orders, (o, i) =>
+            @logger.info "#{i} Retailer: #{o.retailerOrder.id}, Master: #{o.masterOrder.id}"
 
-      @logger.info _.map(@orders, (o)-> "\"#{o.retailerOrder.id}\"").join(',')
+          @logger.info _.map(@orders, (o)-> "\"#{o.retailerOrder.id}\"").join(',')
 
-      this
+          this
+      else
+        @sphere.importOrder @_orderJson(3)
+        .then (order) =>
+          @order = order
+          @logger.info "Order created: #{order.id}"
+          this
     .then =>
-      @addSotock(@orders[0].retailerOrder.lineItems[0].variant.sku, 1000000)
+      if not onlyOneOrderWith3LineItems
+        @addStock(@orders[0].retailerOrder.lineItems[0].variant.sku, 1000000)
+      else
+        Q()
     .then =>
       @logger.info "Project setup finished"
       this
@@ -64,7 +87,10 @@ class  SphereTestKit
     {typeId: type, id: obj.id}
 
   stateByKey: (key) ->
-    _.find @states, (s) -> s.key == key
+    if key == 'Initial'
+      @initialState
+    else
+      _.find @states, (s) -> s.key == key
 
   stateById: (id) ->
     _.find @states, (s) -> s.id == id
@@ -104,6 +130,18 @@ class  SphereTestKit
         os.retailerOrder = newOrder
         newOrder
     Q.all ps
+
+  transitionStatePath: (lineItemIdx, quantity, path) ->
+    reduceFn = (acc, to) =>
+      acc.then ([from, order]) =>
+        @sphere.transitionLineItemState order, order.lineItems[lineItemIdx].id, quantity, @ref('state', @stateByKey(from)), @ref('state', @stateByKey(to))
+      .then (newOrder) ->
+        [to, newOrder]
+
+    _.reduce _.tail(path), reduceFn, Q([_.head(path), @order])
+    .then ([endKey, order]) =>
+      @order = order
+      order
 
   scheduleStateTransitions: (first, stateSwitch) ->
     Rx.Observable.interval 2000
@@ -146,13 +184,13 @@ class  SphereTestKit
       @logger.info "Tax category configured"
       tc
 
-  _orderJson: () ->
-    {
-      lineItems: [{
+  _orderJson: (lineItemCount = 1, quantity = 30) ->
+    lineItems = _.map _.range(0, lineItemCount), (idx) =>
+      {
         variant: {
           sku: @product.masterData.staged.masterVariant.sku
         },
-        quantity: 30,
+        quantity: quantity,
         taxRate: {
           name: "some_name",
           amount: 0.19,
@@ -161,7 +199,7 @@ class  SphereTestKit
           id: @taxCategory.id
         },
         name: {
-          en: "Some Product"
+          en: "Some Product #{idx}"
         },
         price: {
           country: "US",
@@ -170,7 +208,10 @@ class  SphereTestKit
             currencyCode: "USD"
           }
         }
-      }],
+      }
+
+    {
+      lineItems: lineItems,
       totalPrice: {
         currencyCode: "USD",
         centAmount: 1190
@@ -241,16 +282,16 @@ class  SphereTestKit
 
     Q.all ps
 
-  addSotock: (sku, quantity) ->
+  addStock: (sku, quantity) ->
     @sphere.getInvetoryEntryBySkuAndChannel sku, null
     .then (ie) =>
       @sphere.addInventoryQuantity ie, quantity - ie.availableQuantity
     .fail (e) =>
       @sphere.createInventoryEntry sku, quantity
 
-  @setupProject: (sphereService) ->
+  @setupProject: (sphereService, onlyOneOrderWith3LineItems = false) ->
     sphereTestKit = new SphereTestKit sphereService
-    sphereTestKit.setupProject()
+    sphereTestKit.setupProject(onlyOneOrderWith3LineItems)
 
   @cleanup = (done, subscription, processor) ->
     if subscription?

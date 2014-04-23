@@ -599,7 +599,7 @@ class Stats
   startPrinter: (countOnly = false) ->
     subscription  = Rx.Observable.interval(3000).subscribe =>
       @logger.info "+---------------- STATS ----------------+"
-      @logger.info JSON.stringify(@toJSON(countOnly))
+      @logger.info JSON.stringify(@toJSON(countOnly), null, 4)
       @logger.info "+----------------- END -----------------+"
 
     @addStopListener =>
