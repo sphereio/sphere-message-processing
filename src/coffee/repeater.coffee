@@ -1,5 +1,5 @@
 Q = require 'q'
-_ = require('underscore')._
+{_} = require 'underscore'
 
 # TODO: Class is copy/pasted from csv-mapper unchanged --> share this class in some common library
 class Repeater

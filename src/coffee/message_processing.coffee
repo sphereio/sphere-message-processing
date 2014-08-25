@@ -9,6 +9,7 @@ _s = require 'underscore.string'
 {MessagePersistenceService} = require '../lib/message_persistence'
 {TaskQueue} = require '../lib/task_queue'
 {ProjectCredentialsConfig} = require 'sphere-node-utils'
+{GraphitePublisher} = require '../lib/stats_publisher'
 
 util = require '../lib/util'
 {LoggerFactory} = require '../lib/logger'
@@ -74,6 +75,18 @@ class MessageProcessing
       @stats = new Stats _.extend({}, defaultStatsOptions, @statsOptions, statsStartOptions)
       @requestQueue = new TaskQueue @stats, {maxParallelTasks: @argv.maxParallelSphereConnections}
       @_offlineMode = statsStartOptions.offline
+
+      if @argv.publishToGraphite
+        @_statsPublisher = new GraphitePublisher
+          stats: @stats
+          logger: @rootLogger
+          prefix: "#{@argv.graphitePrefix}.#{@processorName}"
+          intervalMs: @argv.graphiteReportInterval
+          carbonHost: @argv.graphiteHost
+          carbonPort: @argv.graphitePort
+          statsFn: =>
+            @stats.allStats()
+
       @_initialized = true
 
     this
@@ -182,6 +195,11 @@ class MessageProcessingBuilder
     .describe('maxParallelSphereConnections', 'How many parallel connection to sphere are allowed.')
     .describe('messagesPageSize', 'How many should be loaded in one go.')
     .describe('logLevel', 'Loging intensity: debug|info|warn|error')
+    .describe('publishToGraphite', 'Publish metrics to graphite')
+    .describe('graphitePrefix', 'The metrics key prefix')
+    .describe('graphiteReportInterval', 'Graphite reporting interval (in ms)')
+    .describe('graphiteHost', 'Graphite host name')
+    .describe('graphitePort', 'Graphite port')
     .default('statsPort', 7777)
     .default('awaitTimeout', 120000)
     .default('heartbeatInterval', 2000)
@@ -190,6 +208,11 @@ class MessageProcessingBuilder
     .default('maxParallelSphereConnections', 100)
     .default('logLevel', 'info')
     .default('sphereHost', 'api.sphere.io')
+    .default('publishToGraphite', false)
+    .default('graphitePrefix', "message_processor")
+    .default('graphiteReportInterval', 60000)
+    .default('graphiteHost', "localhost")
+    .default('graphitePort', 2003)
 
     if @optimistExtrasFn?
       @optimistExtrasFn o

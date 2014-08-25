@@ -53,9 +53,11 @@ class Stats
     @messageFetchErrors = new Meter "messageFetchErrors", @units
     @messageProcessingTimer = new measured.Timer()
 
-    @customStats = []
-    @customMeters = []
-    @customTimers = []
+    # x-tree initializer
+    @customStats =      []
+    @customMeters =    [  ]
+    @customTimers =   [    ]
+    @_stopListeners =   []
 
     @_eventSubject = options.eventSubject or new Rx.Subject()
 
@@ -70,8 +72,6 @@ class Stats
 
     @_panicModeObserver = new Rx.BehaviorSubject()
     @panicModeEvents = @_panicModeObserver
-
-    @_stopListeners = []
 
     @addStopListener =>
       @_cacheClearCommandsObserver.onCompleted()
@@ -90,26 +90,45 @@ class Stats
   postEvent: (event) ->
     @_eventSubject.onNext(event)
 
-  _unrefMeters: () ->
-    # workaround until PR is merged: https://github.com/felixge/node-measured/pull/12
-    allTimerMeters = _.map [@messageProcessingTimer].concat(_.map(@customTimers, (t) -> t.timer)), (t) -> t._meter
-    allMeters = _.map(@customMeters, (m) -> m.meter).concat(allTimerMeters).concat([
-      @messagesIn
-      @messagesOut
-      @tasksStarted
-      @tasksFinished
-      @awaitOrderingIn
-      @awaitOrderingOut
-      @lockedMessages
-      @unlockedMessages
-      @inProcessing
-      @lockFailedMessages
-      @processedSuccessfully
-      @processingErrors
-      @messageFetchErrors
+  _allTimerMeters: ->
+    _.map [{name: "messageProcessingTimer", meter: @messageProcessingTimer}].concat(_.map(@customTimers, (t) -> {name: "#{t.prefix}.#{t.name}", meter: t.timer})), (t) -> {name: t.name, meter: t.meter._meter, hist: t.meter._histogram}
+
+  _allMeters: ->
+    _.map(@customMeters, (m) -> {name: "#{m.prefix}.#{m.name}", meter: m.meter}).concat([
+      {name: "messagesIn", meter: @messagesIn}
+      {name: "messagesOut", meter: @messagesOut}
+      {name: "tasksStarted", meter: @tasksStarted}
+      {name: "tasksFinished", meter: @tasksFinished}
+      {name: "awaitOrderingIn", meter: @awaitOrderingIn}
+      {name: "awaitOrderingOut", meter: @awaitOrderingOut}
+      {name: "lockedMessages", meter: @lockedMessages}
+      {name: "unlockedMessages", meter: @unlockedMessages}
+      {name: "inProcessing", meter: @inProcessing}
+      {name: "lockFailedMessages", meter: @lockFailedMessages}
+      {name: "processedSuccessfully", meter: @processedSuccessfully}
+      {name: "processingErrors", meter: @processingErrors}
+      {name: "messageFetchErrors", meter: @messageFetchErrors}
     ])
 
+  _allGauges: ->
+    @customStats.concat([
+      {name: 'messagesInProgress', statJsonFn: (() => @messagesInProgress())}
+      {name: 'activeTasks', statJsonFn: (() => @activeTasks())}
+      {name: 'messagesAwaiting', statJsonFn: (() => @messagesAwaiting())}
+      {name: 'locallyLocked', statJsonFn: (() => @locallyLocked)}
+    ])
+
+  _unrefMeters: ->
+    # workaround until PR is merged: https://github.com/felixge/node-measured/pull/12
+    allTimerMeters = _.map @_allTimerMeters(), (m) -> m.meter
+    allMeters = _.map(@_allMeters(), ((m) -> m.meter)).concat(allTimerMeters)
+
     _.each allMeters, (meter) -> meter.unref()
+
+  allStats: () ->
+    meters: @_allMeters()
+    gauges: @_allGauges()
+    timers: @_allTimerMeters()
 
   toJSON: (countOnly = false) ->
     json =
