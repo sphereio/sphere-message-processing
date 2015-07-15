@@ -97,7 +97,7 @@ $ npm install . -g
 In order to start processor, you need to provide several arguments for it:
 
 ```bash
-$ node bin/send-email-on-order-import.js \
+$ send-email-on-order-import \
     --sourceProjects my-project-key:<CLIENT_ID>:<CLIENT_SECRET>:email=my.email@gmail.com \
     --smtpFrom my.email@gmail.com \
     --smtpConfig smtp.json
