@@ -7,7 +7,8 @@ SPHERE.IO API provides `/messages` resource, that allows you to react on differe
 take some actions when these events happen.
 
 Message processing can be pretty complicated process, since you need to make sure that all of the messages are
-processed in correct order and the processing is idempotent, so that it can be retried if something goes wrong. The library
+processed in correct order and the processing is idempotent, so that it can be retried if something goes wrong.
+You also need to provide rich monitoring and management capabilities in case something goes wrong. The library
 aims to take  most of these infrastructure-related complexities away from you and let you concentrate on the business
 logic of message processor.
 
