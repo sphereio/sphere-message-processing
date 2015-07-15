@@ -90,7 +90,7 @@ this is pretty much it. Now you just need to build the project and install the p
 which you can start from the command-line:
 
 ```bash
-$ grant build
+$ grunt build
 $ npm install . -g
 ```
 
