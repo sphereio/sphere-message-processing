@@ -2,15 +2,11 @@
 
 [![Build Status](https://travis-ci.org/sphereio/sphere-message-processing.png?branch=master)](https://travis-ci.org/sphereio/sphere-message-processing) [![NPM version](https://badge.fury.io/js/sphere-message-processing.png)](http://badge.fury.io/js/sphere-message-processing)
 
-**sphere-message-processing** is a nodejs library that helps you to write message listeners for you SPHERE.IO projects.
-SPHERE.IO API provides `/messages` resource, that allows you to react on different events happening in the project and
-take some actions when these events happen.
+**sphere-message-processing** is a node.js library that helps you to write message listeners for your SPHERE.IO projects.
+The SPHERE.IO API provides the  [messages](/dev/http-api-projects-messages.html) resource, that allows you to react on different events happening in the project and to take some actions when these events happen.
 
-Message processing can be pretty complicated process, since you need to make sure that all of the messages are
-processed in correct order and the processing is idempotent, so that it can be retried if something goes wrong.
-You also need to provide rich monitoring and management capabilities in case something goes wrong. The library
-aims to take  most of these infrastructure-related complexities away from you and let you concentrate on the business
-logic of message processor.
+Message processing can be a pretty complicated process, since you need to make sure that all of the messages are processed in correct order and the processing is idempotent, so that it can be retried if something goes wrong.  
+You also need to provide rich monitoring and management capabilities to figure out when something goes wrong. The library aims to take most of these infrastructure-related complexities away from you and let you fully concentrate on the business logic of message processing.
 
 ## Getting Started
 
@@ -24,10 +20,7 @@ You can include the library in `package.json` file like this:
   },
 ```
 
-Let's create a simple message processor, that sends an e-mail every time order is imported in sphere project. you can find the full
-source code of this project here:
-
-https://github.com/OlegIlyenko/sphere-message-processing-example
+Let's create a simple message processor that sends an e-mail every time an order is imported into a SPHERE.IO project. You'll find the complete source code of this project in a separate [GitHub repository](https://github.com/OlegIlyenko/sphere-message-processing-example).
 
 First we need to define the processor's code:
 
@@ -86,15 +79,14 @@ module.exports = MessageProcessing.builder()
 
 ```
 
-this is pretty much it. Now you just need to build the project and install the project locally - it's a full-featured application,
-which you can start from the command-line:
+This is pretty much it. Now you just need to build the project and to install the project locally - it's a full-featured application, that you can start from command-line:
 
 ```bash
 $ grunt build
 $ npm install . -g
 ```
 
-In order to start processor, you need to provide several arguments for it:
+In order to start the processor, you need to provide several arguments for it:
 
 ```bash
 $ send-email-on-order-import \
@@ -103,7 +95,7 @@ $ send-email-on-order-import \
     --smtpConfig smtp.json
 ```
 
-`smtp.json` can look like this:
+The config file `smtp.json` could look like this:
 
 ```javascript
 {
@@ -115,19 +107,18 @@ $ send-email-on-order-import \
 }
 ```
 
-After you started the processor it will wait for all new `OrderImported` messages and will send and e-mail to `my.email@gmail.com`.
-**sphere-message-processing** library will also take care of auth token and will refresh token when necessary.
+After you started the processor it will wait for all new `OrderImported` messages and it will send and e-mail to `my.email@gmail.com`.  
+**sphere-message-processing** library will also take care of auth tokens and it will refresh tokens when necessary.
 
-`MessageProcessing` also opens a stats port (by default port number is **7777**). It's a simple REST API provides you with very
-powerful monitoring and management capabilities.
+`MessageProcessing` also opens a stats port (default port number is **7777**). It's a simple REST API that provides you with very powerful monitoring and management capabilities.
 
-For example you can get all of the metrics with this command-line command:
+For example, you can get all of the metrics with this shell command:
 
 ```bash
 curl localhost:7777
 ```
 
-A shorter list of the most important metrics can be retrieved line this:
+A shorter list of the most important metrics can be retrieved by the `count` parameter like this:
 
 ```bash
 curl localhost:7777/count
