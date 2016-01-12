@@ -2,8 +2,8 @@
 
 [![Build Status](https://travis-ci.org/sphereio/sphere-message-processing.png?branch=master)](https://travis-ci.org/sphereio/sphere-message-processing) [![NPM version](https://badge.fury.io/js/sphere-message-processing.png)](http://badge.fury.io/js/sphere-message-processing)
 
-**sphere-message-processing** is a node.js library that helps you to write message listeners for your SPHERE.IO projects.
-The SPHERE.IO API provides the  [messages](/dev/http-api-projects-messages.html) resource, that allows you to react on different events happening in the project and to take some actions when these events happen.
+**sphere-message-processing** is a node.js library that helps you to write message listeners for your commercetools&#8482; platform projects.
+The commercetools&#8482; platform API provides the  [messages](http://dev.commercetools.com/http-api-projects-messages.html) resource, that allows you to react on different events happening in the project and to take some actions when these events happen.
 
 Message processing can be a pretty complicated process, since you need to make sure that all of the messages are processed in correct order and the processing is idempotent, so that it can be retried if something goes wrong.  
 You also need to provide rich monitoring and management capabilities to figure out when something goes wrong. The library aims to take most of these infrastructure-related complexities away from you and let you fully concentrate on the business logic of message processing.
@@ -20,7 +20,7 @@ You can include the library in `package.json` file like this:
   },
 ```
 
-Let's create a simple message processor that sends an e-mail every time an order is imported into a SPHERE.IO project. You'll find the complete source code of this project in a separate [GitHub repository](https://github.com/OlegIlyenko/sphere-message-processing-example).
+Let's create a simple message processor that sends an e-mail every time an order is imported into a commercetools&#8482; platform project. You'll find the complete source code of this project in a separate [GitHub repository](https://github.com/OlegIlyenko/sphere-message-processing-example).
 
 First we need to define the processor's code:
 
