@@ -34,7 +34,7 @@
     "q": "~1.0.0",
     "rx": "2.2.13",
     "lru-cache": "2.5.0",
-    "express": "3.5.0",
+    "express": "3.11.0",
     "measured": "0.1.5",
     "JSONStream": "0.8.0",
     "sphere-node-connect": "0.3.0",
